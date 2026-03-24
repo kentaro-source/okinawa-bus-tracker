@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { AIRPORT_ROUTES, getCoursesGroup, getStations } from './api'
+import { fetchAllRoutes, getCoursesGroup, getStations } from './api'
 
 const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
 const OLD_CACHE_KEY = 'bus-tracker-station-cache';
@@ -28,7 +28,7 @@ function saveStationCache(data) {
   localStorage.setItem(STATION_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
 }
 
-export default function StationSelector({ onSelect, onClose, favorites, onToggleFavorite }) {
+export default function StationSelector({ onSelect, onClose, favorites, onToggleFavorite, title = 'バス停を選択', showAirportShortcut, onSelectAirport }) {
   const [query, setQuery] = useState('');
   const [allStations, setAllStations] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -52,7 +52,8 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       setLoading(true);
       const stationSet = new Map();
 
-      const promises = Object.values(AIRPORT_ROUTES).map(async (route) => {
+      const allRoutes = await fetchAllRoutes();
+      const promises = allRoutes.map(async (route) => {
         try {
           const groups = await getCoursesGroup(route.keitouSid);
           for (const group of groups) {
@@ -131,7 +132,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>バス停を選択</h2>
+          <h2>{title}</h2>
           <button className="btn-close" onClick={onClose}>✕</button>
         </div>
 
@@ -148,6 +149,14 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
             {geoLoading ? '...' : '📍 現在地'}
           </button>
         </div>
+
+        {showAirportShortcut && !query && (
+          <div className="modal-section">
+            <button className="btn-airport-shortcut" onClick={onSelectAirport}>
+              ✈ 那覇空港（デフォルト）
+            </button>
+          </div>
+        )}
 
         {favorites.length > 0 && !query && !nearbyStations && (
           <div className="modal-section">

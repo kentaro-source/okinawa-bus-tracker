@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getAllBuses } from './api'
+import { getAllBuses, getBusesBetween } from './api'
 import BusList from './BusList'
 import StationSelector from './StationSelector'
 import './App.css'
@@ -7,6 +7,8 @@ import './App.css'
 const REFRESH_INTERVAL = 45000;
 const FAVORITES_KEY = 'bus-tracker-favorites';
 const LAST_STATION_KEY = 'bus-tracker-last-station';
+const LAST_DEST_KEY = 'bus-tracker-last-dest';
+const DEFAULT_DEST = '那覇空港';
 
 function loadFavorites() {
   try {
@@ -24,19 +26,25 @@ function App() {
   const [station, setStation] = useState(() =>
     localStorage.getItem(LAST_STATION_KEY) || '屋富祖'
   );
+  const [destination, setDestination] = useState(() =>
+    localStorage.getItem(LAST_DEST_KEY) || DEFAULT_DEST
+  );
   const [buses, setBuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
-  const [showSelector, setShowSelector] = useState(false);
+  const [selectorMode, setSelectorMode] = useState(null); // null | 'from' | 'to'
   const [favorites, setFavorites] = useState(loadFavorites);
-  const [direction, setDirection] = useState('up'); // 'up' = 空港行き, 'down' = 空港発
   const intervalRef = useRef(null);
 
-  const fetchBuses = useCallback(async (stationName) => {
+  const isAirport = destination === DEFAULT_DEST;
+
+  const fetchBuses = useCallback(async (from, to) => {
     try {
       setError(null);
-      const data = await getAllBuses(stationName);
+      const data = to === DEFAULT_DEST
+        ? await getAllBuses(from)
+        : await getBusesBetween(from, to);
       setBuses(data);
       setLastUpdate(new Date());
     } catch (e) {
@@ -49,11 +57,24 @@ function App() {
   const changeStation = useCallback((newStation) => {
     setStation(newStation);
     localStorage.setItem(LAST_STATION_KEY, newStation);
-    setShowSelector(false);
+    setSelectorMode(null);
     setLoading(true);
     setBuses([]);
-    fetchBuses(newStation);
-  }, [fetchBuses]);
+    fetchBuses(newStation, destination);
+  }, [fetchBuses, destination]);
+
+  const changeDestination = useCallback((newDest) => {
+    setDestination(newDest);
+    localStorage.setItem(LAST_DEST_KEY, newDest);
+    setSelectorMode(null);
+    setLoading(true);
+    setBuses([]);
+    fetchBuses(station, newDest);
+  }, [fetchBuses, station]);
+
+  const resetToAirport = useCallback(() => {
+    changeDestination(DEFAULT_DEST);
+  }, [changeDestination]);
 
   const toggleFavorite = useCallback((stationName) => {
     setFavorites(prev => {
@@ -66,22 +87,34 @@ function App() {
   }, []);
 
   useEffect(() => {
-    fetchBuses(station);
-    intervalRef.current = setInterval(() => fetchBuses(station), REFRESH_INTERVAL);
+    fetchBuses(station, destination);
+    intervalRef.current = setInterval(() => fetchBuses(station, destination), REFRESH_INTERVAL);
     return () => clearInterval(intervalRef.current);
-  }, [station, fetchBuses]);
+  }, [station, destination, fetchBuses]);
 
   const isFavorite = favorites.includes(station);
-  const filteredBuses = buses.filter(b => b.direction === direction);
+
+  // For airport mode, keep direction filter; for custom dest, show all results
+  const filteredBuses = isAirport
+    ? buses.filter(b => b.direction === 'up')
+    : buses;
 
   return (
     <div className="app">
       <header className="header">
         <div className="header-route">
-          <span className="header-from">{station}</span>
-          <span className="header-arrow">⇄</span>
-          <span className="header-to">那覇空港</span>
-          <button className="btn-change" onClick={() => setShowSelector(true)}>変更</button>
+          <button className="header-station-btn" onClick={() => setSelectorMode('from')}>
+            <span className="header-from">{station}</span>
+          </button>
+          <span className="header-arrow">→</span>
+          <button className="header-station-btn" onClick={() => setSelectorMode('to')}>
+            <span className={`header-to ${isAirport ? '' : 'custom-dest'}`}>{destination}</span>
+          </button>
+          {!isAirport && (
+            <button className="btn-reset-dest" onClick={resetToAirport} title="空港行きに戻す">
+              ✈
+            </button>
+          )}
           <button
             className={`btn-fav ${isFavorite ? 'is-fav' : ''}`}
             onClick={() => toggleFavorite(station)}
@@ -93,27 +126,18 @@ function App() {
         {lastUpdate && (
           <div className="header-update">
             最終更新: {lastUpdate.toLocaleTimeString('ja-JP')}
-            <button className="btn-refresh" onClick={() => fetchBuses(station)} disabled={loading}>
+            <button className="btn-refresh" onClick={() => fetchBuses(station, destination)} disabled={loading}>
               {loading ? '...' : '↻'}
             </button>
           </div>
         )}
       </header>
 
-      <div className="direction-tabs">
-        <button
-          className={`tab ${direction === 'up' ? 'active' : ''}`}
-          onClick={() => setDirection('up')}
-        >
-          空港行き
-        </button>
-        <button
-          className={`tab ${direction === 'down' ? 'active' : ''}`}
-          onClick={() => setDirection('down')}
-        >
-          空港発
-        </button>
-      </div>
+      {isAirport && (
+        <div className="direction-tabs">
+          <div className="tab active">空港行き</div>
+        </div>
+      )}
 
       <main className="main">
         {loading && buses.length === 0 && (
@@ -124,7 +148,7 @@ function App() {
         )}
         {!loading && filteredBuses.length === 0 && !error && (
           <div className="empty">
-            現在、{station}を通る{direction === 'up' ? '空港行き' : '空港発'}バスは運行していません
+            現在、{station}→{destination}のバスは見つかりませんでした
           </div>
         )}
         <BusList buses={filteredBuses} />
@@ -143,18 +167,21 @@ function App() {
               </button>
             ))}
           </div>
-          <button className="btn-action" onClick={() => setShowSelector(true)}>
+          <button className="btn-action" onClick={() => setSelectorMode('from')}>
             バス停検索
           </button>
         </div>
       </footer>
 
-      {showSelector && (
+      {selectorMode && (
         <StationSelector
-          onSelect={changeStation}
-          onClose={() => setShowSelector(false)}
+          onSelect={selectorMode === 'from' ? changeStation : changeDestination}
+          onClose={() => setSelectorMode(null)}
           favorites={favorites}
           onToggleFavorite={toggleFavorite}
+          title={selectorMode === 'from' ? '出発バス停を選択' : '目的地を選択'}
+          showAirportShortcut={selectorMode === 'to'}
+          onSelectAirport={selectorMode === 'to' ? resetToAirport : null}
         />
       )}
     </div>

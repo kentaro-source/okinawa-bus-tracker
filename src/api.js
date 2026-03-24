@@ -1,68 +1,48 @@
 const BASE = '/api';
 
-// All airport-related route definitions
-export const AIRPORT_ROUTES = {
-  '26': {
-    keitouSid: 'de8fb322-e8e0-4b16-9838-f9c613ab3146',
-    name: '26番 宜野湾空港線',
-    short: '26',
-  },
-  '120': {
-    keitouSid: 'c2d5a846-d5ab-41a8-9da6-9ca28e8fa812',
-    name: '120番 名護西空港線',
-    short: '120',
-  },
-  '132': {
-    keitouSid: '48dcf8fe-ff26-4a5b-b9d8-6df2f8127881',
-    name: '132番 空港コンベンション線',
-    short: '132',
-  },
-  '95': {
-    keitouSid: '0a8869a0-e40f-4914-a7b6-e4790abbc64f',
-    name: '95番 空港あしびなー線',
-    short: '95',
-  },
-  '99': {
-    keitouSid: '6db19623-9894-4304-ad04-67f829e85467',
-    name: '99番 天久新都心線',
-    short: '99',
-  },
-  '113': {
-    keitouSid: 'db39c118-28ed-4b03-8f12-9440b4cb6e00',
-    name: '113番 具志川空港線',
-    short: '113',
-  },
-  '123': {
-    keitouSid: '2f1a9887-e290-4bd2-a96e-9a5fd00328ca',
-    name: '123番 石川空港線',
-    short: '123',
-  },
-  '125': {
-    keitouSid: '18576435-f639-4dc0-afbe-64e5cfc1c45c',
-    name: '125番 普天間空港線',
-    short: '125',
-  },
-  '127': {
-    keitouSid: 'b45c2134-a337-45aa-8023-ff239d09043a',
-    name: '127番 屋慶名高速線',
-    short: '127',
-  },
-  '143': {
-    keitouSid: '0c6cf7ef-6a7a-47ee-911d-480c8938e3cd',
-    name: '143番 空港北谷線',
-    short: '143',
-  },
-  '189': {
-    keitouSid: '74ed9a6c-ffc7-4229-b07e-caee6d9da8da',
-    name: '189番 糸満空港線',
-    short: '189',
-  },
-  '190': {
-    keitouSid: 'db87aff5-5c46-4363-81d4-203e17ced42b',
-    name: '190番 知花空港線',
-    short: '190',
-  },
-};
+// Known airport route numbers (used as default filter)
+export const AIRPORT_ROUTE_NUMBERS = new Set([
+  '26', '95', '99', '113', '120', '123', '125', '127', '132', '143', '189', '190',
+]);
+
+// Cache for the full route list
+const ROUTE_LIST_CACHE_KEY = 'bus-tracker-route-list';
+let routeListCache = null;
+
+// Fetch all routes from the proxy (parses HTML dropdown)
+export async function fetchAllRoutes() {
+  if (routeListCache) return routeListCache;
+
+  // Check localStorage
+  try {
+    const cached = JSON.parse(localStorage.getItem(ROUTE_LIST_CACHE_KEY));
+    if (cached && cached.ts > Date.now() - 86400000) {
+      routeListCache = cached.data;
+      return routeListCache;
+    }
+  } catch {}
+
+  const routes = await fetchJSON(`${BASE}/GetRouteList`);
+  const normalized = routes.map(r => ({
+    keitouSid: r.keitouSid,
+    name: `${r.number}番 ${r.name}`,
+    short: r.number,
+  }));
+
+  routeListCache = normalized;
+  localStorage.setItem(ROUTE_LIST_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: normalized }));
+  return normalized;
+}
+
+// Get airport routes only
+export async function getAirportRoutes() {
+  const all = await fetchAllRoutes();
+  return all.filter(r => AIRPORT_ROUTE_NUMBERS.has(r.short));
+}
+
+// Legacy compat
+export const AIRPORT_ROUTES = {};
+// Will be populated on first call; use getAirportRoutes() instead
 
 function dt() {
   const d = new Date();
@@ -232,11 +212,11 @@ function processBuses(buses, stationName, route, group, direction) {
   return results;
 }
 
-// Get all buses (both directions) across all routes, filtered by station name
-export async function getAllBuses(stationName) {
+// Fetch buses for a given set of routes, filtered by station name
+async function fetchBusesForRoutes(routes, stationName, destinationName) {
   const results = [];
 
-  const promises = Object.values(AIRPORT_ROUTES).map(async (route) => {
+  const promises = routes.map(async (route) => {
     try {
       const groups = await getCoursesGroup(route.keitouSid);
 
@@ -249,9 +229,25 @@ export async function getAllBuses(stationName) {
           getStations(route.keitouSid, group.Sid),
         ]);
 
-        // Check if this direction passes through the station
+        // Check if this direction passes through the departure station
         const hasStation = stations.some(s => s.Name.includes(stationName));
         if (!hasStation) continue;
+
+        // If destination specified, check if this direction also passes through it
+        if (destinationName) {
+          const hasDestination = stations.some(s => s.Name.includes(destinationName));
+          if (!hasDestination) continue;
+
+          // Ensure departure comes before destination in the route order
+          const depOrder = stations.find(s => s.Name.includes(stationName))?.OrderNo;
+          const destOrder = stations.find(s => s.Name.includes(destinationName))?.OrderNo;
+          if (depOrder != null && destOrder != null) {
+            // OrderNo can be an array; use first value
+            const depIdx = Array.isArray(depOrder) ? depOrder[0] : depOrder;
+            const destIdx = Array.isArray(destOrder) ? destOrder[0] : destOrder;
+            if (depIdx >= destIdx) continue; // wrong direction for this pair
+          }
+        }
 
         const processed = processBuses(buses, stationName, route, group, direction);
         results.push(...processed);
@@ -263,7 +259,6 @@ export async function getAllBuses(stationName) {
 
   await Promise.all(promises);
 
-  // Sort: not-passed first (by ETA), then passed
   return results
     .filter(r => r.etaMinutes !== -1)
     .sort((a, b) => {
@@ -273,12 +268,21 @@ export async function getAllBuses(stationName) {
     });
 }
 
+// Get airport-bound buses from a station (default behavior)
+export async function getAllBuses(stationName) {
+  const airportRoutes = await getAirportRoutes();
+  return fetchBusesForRoutes(airportRoutes, stationName, null);
+}
+
+// Get buses between any two stations across ALL routes
+export async function getBusesBetween(fromStation, toStation) {
+  const allRoutes = await fetchAllRoutes();
+  return fetchBusesForRoutes(allRoutes, fromStation, toStation);
+}
+
 // Backwards compatible alias
 export const getAllAirportBuses = getAllBuses;
 
 export async function getAllRoutes() {
-  return Object.entries(AIRPORT_ROUTES).map(([key, route]) => ({
-    key,
-    ...route,
-  }));
+  return fetchAllRoutes();
 }
