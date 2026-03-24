@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
 import { AIRPORT_ROUTES, getCoursesGroup, getStations } from './api'
 
-const STATION_CACHE_KEY = 'bus-tracker-station-cache';
+const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
+const OLD_CACHE_KEY = 'bus-tracker-station-cache';
+
+// Haversine distance in meters
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 function loadStationCache() {
   try {
+    // Clean up old cache format
+    localStorage.removeItem(OLD_CACHE_KEY);
     const cached = JSON.parse(localStorage.getItem(STATION_CACHE_KEY));
     if (cached && cached.ts > Date.now() - 86400000) return cached.data;
   } catch {}
@@ -20,6 +33,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
   const [allStations, setAllStations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
+  const [nearbyStations, setNearbyStations] = useState(null); // [{station, distance}]
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -49,12 +63,19 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 stationSet.set(cleanName, {
                   name: cleanName,
                   fullName: s.Name,
+                  lat: s.Latitude || null,
+                  lng: s.Longitude || null,
                   routes: [route.short],
                 });
               } else {
                 const existing = stationSet.get(cleanName);
                 if (!existing.routes.includes(route.short)) {
                   existing.routes.push(route.short);
+                }
+                // Update coordinates if missing
+                if (!existing.lat && s.Latitude) {
+                  existing.lat = s.Latitude;
+                  existing.lng = s.Longitude;
                 }
               }
             }
@@ -82,19 +103,27 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       return;
     }
     setGeoLoading(true);
+    setNearbyStations(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude } = pos.coords;
-        // Find nearest station (approximate using station coordinates if available)
-        // For now, suggest common stations near the user
+        const withDistance = allStations
+          .filter(s => s.lat && s.lng)
+          .map(s => ({
+            station: s,
+            distance: haversineDistance(latitude, longitude, s.lat, s.lng),
+          }))
+          .sort((a, b) => a.distance - b.distance)
+          .slice(0, 5);
+        setNearbyStations(withDistance);
         setGeoLoading(false);
-        alert(`現在地: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}\n最寄りバス停検索は今後対応予定です。\nバス停名で検索してください。`);
+        setQuery('');
       },
       () => {
         setGeoLoading(false);
         alert('位置情報を取得できませんでした');
       },
-      { timeout: 10000 }
+      { timeout: 10000, enableHighAccuracy: true }
     );
   };
 
@@ -112,7 +141,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
             type="text"
             placeholder="バス停名を入力..."
             value={query}
-            onChange={e => setQuery(e.target.value)}
+            onChange={e => { setQuery(e.target.value); setNearbyStations(null); }}
             className="search-input"
           />
           <button className="btn-geo" onClick={handleGeolocate} disabled={geoLoading}>
@@ -120,7 +149,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           </button>
         </div>
 
-        {favorites.length > 0 && !query && (
+        {favorites.length > 0 && !query && !nearbyStations && (
           <div className="modal-section">
             <h3>お気に入り</h3>
             {favorites.map(fav => (
@@ -130,6 +159,31 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {nearbyStations && (
+          <div className="modal-section">
+            <h3>📍 最寄りバス停</h3>
+            {nearbyStations.map(({ station, distance }) => (
+              <div key={station.name} className="station-item">
+                <button className="station-btn" onClick={() => onSelect(station.name)}>
+                  <span className="station-name">{station.name}</span>
+                  <span className="station-distance">
+                    {distance < 1000 ? `${Math.round(distance)}m` : `${(distance / 1000).toFixed(1)}km`}
+                  </span>
+                </button>
+                <button
+                  className={`btn-fav-small ${favorites.includes(station.name) ? 'is-fav' : ''}`}
+                  onClick={() => onToggleFavorite(station.name)}
+                >
+                  {favorites.includes(station.name) ? '★' : '☆'}
+                </button>
+              </div>
+            ))}
+            <button className="btn-clear-nearby" onClick={() => setNearbyStations(null)}>
+              全バス停を表示
+            </button>
           </div>
         )}
 

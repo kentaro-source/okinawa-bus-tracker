@@ -52,14 +52,18 @@ export default function BusList({ buses }) {
                   </span>
                 )}
               </div>
-              {bus.currentStop && (
+              {bus.notDeparted ? (
+                <div className="bus-position not-departed">
+                  🕐 {String(bus.scheduledHour).padStart(2,'0')}:{String(bus.scheduledMinute).padStart(2,'0')}発（未出発）
+                </div>
+              ) : bus.currentStop ? (
                 <div className="bus-position">
                   📍 {bus.currentStop}
                   {bus.stopsAway != null && bus.stopsAway > 0 && (
                     <span className="stops-away">（{bus.stopsAway}停留所前）</span>
                   )}
                 </div>
-              )}
+              ) : null}
               <div className="bus-detail">
                 <span className="bus-company">{bus.company}</span>
                 {bus.scheduledTime && <span className="bus-scheduled">定刻 {bus.scheduledTime}</span>}

@@ -104,12 +104,23 @@ export function parseNetDate(dateStr) {
   return new Date(parseInt(match[1], 10));
 }
 
+// Check if a bus schedule applies to the current day of week
+function isRunningToday(youbiKbn) {
+  if (!youbiKbn) return true; // If no day info, assume it runs
+  const dayFlags = ['IsSunday', 'IsMonday', 'IsTuesday', 'IsWednesday', 'IsThursday', 'IsFriday', 'IsSaturday'];
+  const todayFlag = dayFlags[new Date().getDay()];
+  return youbiKbn[todayFlag] === true;
+}
+
 // Process buses from a single group (上り or 下り)
 function processBuses(buses, stationName, route, group, direction) {
   const results = [];
 
   for (const bus of buses) {
     if (!bus.Daiya) continue;
+
+    // Skip buses not scheduled for today's day of week
+    if (!isRunningToday(bus.Daiya.YoubiKbn)) continue;
 
     const schedules = bus.Daiya.PassedSchedules || [];
     const passages = bus.Passages || [];
@@ -189,6 +200,9 @@ function processBuses(buses, stationName, route, group, direction) {
       }
     }
 
+    // Determine if bus has not departed yet (no passage data)
+    const notDeparted = !busAlreadyPassed && passages.length === 0;
+
     results.push({
       routeKey: route.short,
       routeName: route.name,
@@ -202,9 +216,12 @@ function processBuses(buses, stationName, route, group, direction) {
       },
       gpsTime: parseNetDate(bus.GpsTime),
       scheduledTime,
+      scheduledHour: stationSchedule.ScheduledTime.Hour,
+      scheduledMinute: stationSchedule.ScheduledTime.Minute,
       etaMinutes,
       delayMinutes: delayMinutes || 0,
       passed: busAlreadyPassed,
+      notDeparted,
       destination,
       speed: bus.Speed,
       currentStop,

@@ -239,6 +239,10 @@ body {
   margin-top: 2px;
 }
 
+.bus-position.not-departed {
+  color: var(--text2);
+}
+
 .stops-away {
   color: var(--text2);
 }
@@ -439,6 +443,25 @@ body {
 
 .btn-fav-small.is-fav {
   color: var(--yellow);
+}
+
+.station-distance {
+  font-size: 11px;
+  color: var(--accent);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.btn-clear-nearby {
+  background: none;
+  border: 1px solid var(--bg3);
+  color: var(--text2);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 8px;
 }
 
 .more-hint {
