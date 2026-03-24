@@ -1,0 +1,75 @@
+function getStatusColor(eta) {
+  if (eta === null) return 'gray';
+  if (eta <= 5) return 'green';
+  if (eta <= 20) return 'yellow';
+  return 'red';
+}
+
+function getStatusEmoji(eta) {
+  if (eta === null) return '⏳';
+  if (eta <= 5) return '🟢';
+  if (eta <= 20) return '🟡';
+  return '🔴';
+}
+
+function formatETA(minutes) {
+  if (minutes === null) return '不明';
+  if (minutes <= 0) return 'まもなく';
+  if (minutes >= 60) return `${Math.floor(minutes / 60)}時間${minutes % 60}分`;
+  return `あと${minutes}分`;
+}
+
+function formatDelay(minutes) {
+  if (!minutes || minutes === 0) return '';
+  if (minutes > 0) return `遅延${minutes}分`;
+  return `${Math.abs(minutes)}分早い`;
+}
+
+export default function BusList({ buses }) {
+  if (!buses || buses.length === 0) return null;
+
+  return (
+    <div className="bus-list">
+      {buses.map((bus, i) => {
+        const color = getStatusColor(bus.etaMinutes);
+        const isFirst = i === 0;
+
+        return (
+          <div key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} className={`bus-card ${color} ${isFirst ? 'first' : ''}`}>
+            <div className="bus-status">
+              <span className="bus-emoji">{getStatusEmoji(bus.etaMinutes)}</span>
+            </div>
+            <div className="bus-info">
+              <div className="bus-route">
+                <span className="route-number">{bus.routeShort}番</span>
+                <span className="route-name">{bus.routeName.replace(/^\d+番\s*/, '')}</span>
+              </div>
+              <div className="bus-eta">
+                <span className="eta-time">{formatETA(bus.etaMinutes)}</span>
+                {bus.delayMinutes !== 0 && (
+                  <span className={`eta-delay ${bus.delayMinutes > 0 ? 'late' : 'early'}`}>
+                    ({formatDelay(bus.delayMinutes)})
+                  </span>
+                )}
+              </div>
+              {bus.currentStop && (
+                <div className="bus-position">
+                  📍 {bus.currentStop}
+                  {bus.stopsAway != null && bus.stopsAway > 0 && (
+                    <span className="stops-away">（{bus.stopsAway}停留所前）</span>
+                  )}
+                </div>
+              )}
+              <div className="bus-detail">
+                <span className="bus-company">{bus.company}</span>
+                {bus.scheduledTime && <span className="bus-scheduled">定刻 {bus.scheduledTime}</span>}
+                <span className="bus-dest">→ {bus.destination}</span>
+                {isFirst && <span className="bus-fastest">← 最速</span>}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
