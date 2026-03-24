@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.busdoko.okinawa",
+    "sha256_cert_fingerprints": ["D7:E6:93:99:7D:58:86:09:88:54:1B:29:B4:45:3C:9B:1F:0D:63:39:2B:4D:A8:06:5C:A4:76:6E:EF:B3:9C:4C"]
+  }
+}]

@@ -223,34 +223,36 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           </div>
         )}
 
-        <div className="modal-section">
-          {loading ? (
-            <div className="loading">バス停一覧を読み込み中...</div>
-          ) : (
-            <div className="station-list">
-              {filtered.slice(0, 50).map(s => (
-                <div key={s.name} className="station-item">
-                  <button className="station-btn" onClick={() => onSelect(s.name)}>
-                    <span className="station-name">{s.name}</span>
-                    <span className="station-routes">{s.routes.map(r => r + '番').join(' ')}</span>
-                  </button>
-                  <button
-                    className={`btn-fav-small ${favorites.includes(s.name) ? 'is-fav' : ''}`}
-                    onClick={() => onToggleFavorite(s.name)}
-                  >
-                    {favorites.includes(s.name) ? '★' : '☆'}
-                  </button>
-                </div>
-              ))}
-              {filtered.length > 50 && (
-                <div className="more-hint">他 {filtered.length - 50} 件 — 検索で絞り込んでください</div>
-              )}
-              {filtered.length === 0 && query && (
-                <div className="empty">「{query}」に一致するバス停がありません</div>
-              )}
-            </div>
-          )}
-        </div>
+        {query && (
+          <div className="modal-section">
+            {loading ? (
+              <div className="loading">バス停を検索中...</div>
+            ) : (
+              <div className="station-list">
+                {filtered.slice(0, 50).map(s => (
+                  <div key={s.name} className="station-item">
+                    <button className="station-btn" onClick={() => onSelect(s.name)}>
+                      <span className="station-name">{s.name}</span>
+                      <span className="station-routes">{s.routes.map(r => r + '番').join(' ')}</span>
+                    </button>
+                    <button
+                      className={`btn-fav-small ${favorites.includes(s.name) ? 'is-fav' : ''}`}
+                      onClick={() => onToggleFavorite(s.name)}
+                    >
+                      {favorites.includes(s.name) ? '★' : '☆'}
+                    </button>
+                  </div>
+                ))}
+                {filtered.length > 50 && (
+                  <div className="more-hint">他 {filtered.length - 50} 件 — 絞り込んでください</div>
+                )}
+                {filtered.length === 0 && (
+                  <div className="empty">「{query}」に一致するバス停がありません</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

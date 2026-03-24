@@ -24,7 +24,7 @@ function saveFavorites(favs) {
 
 function App() {
   const [station, setStation] = useState(() =>
-    localStorage.getItem(LAST_STATION_KEY) || '屋富祖'
+    localStorage.getItem(LAST_STATION_KEY) || '那覇バスターミナル'
   );
   const [destination, setDestination] = useState(() =>
     localStorage.getItem(LAST_DEST_KEY) || DEFAULT_DEST
@@ -174,7 +174,7 @@ function App() {
           onClose={() => setSelectorMode(null)}
           favorites={favorites}
           onToggleFavorite={toggleFavorite}
-          title={selectorMode === 'from' ? '出発バス停を選択' : '目的地を選択'}
+          title={selectorMode === 'from' ? '出発バス停を選択' : '目的バス停を選択'}
           showAirportShortcut={selectorMode === 'to'}
           onSelectAirport={selectorMode === 'to' ? resetToAirport : null}
         />
