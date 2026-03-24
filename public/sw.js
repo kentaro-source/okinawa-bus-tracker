@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bus-tracker-v1';
+const CACHE_NAME = 'bus-tracker-v2';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

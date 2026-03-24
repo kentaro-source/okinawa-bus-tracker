@@ -482,6 +482,22 @@ body {
   flex-shrink: 0;
 }
 
+.popular-stops {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-popular {
+  background: var(--bg3);
+  color: var(--text);
+  border: none;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
 .btn-airport-shortcut {
   width: 100%;
   background: var(--bg);
