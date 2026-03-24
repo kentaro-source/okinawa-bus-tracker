@@ -12,9 +12,9 @@ const DEFAULT_DEST = '那覇空港';
 
 function loadFavorites() {
   try {
-    return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || ['屋富祖'];
+    return JSON.parse(localStorage.getItem(FAVORITES_KEY)) || [];
   } catch {
-    return ['屋富祖'];
+    return [];
   }
 }
 
@@ -133,11 +133,6 @@ function App() {
         )}
       </header>
 
-      {isAirport && (
-        <div className="direction-tabs">
-          <div className="tab active">空港行き</div>
-        </div>
-      )}
 
       <main className="main">
         {loading && buses.length === 0 && (

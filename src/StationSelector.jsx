@@ -4,6 +4,20 @@ import { fetchAllRoutes, getCoursesGroup, getStations } from './api'
 const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
 const OLD_CACHE_KEY = 'bus-tracker-station-cache';
 
+const POPULAR_STOPS = [
+  '那覇バスターミナル',
+  '県庁北口',
+  '牧志',
+  '泊高橋',
+  '普天間',
+  'アメリカンビレッジ',
+  'イオンモール沖縄ライカム',
+  '具志川バスターミナル',
+  'コンベンションセンター前',
+  '名護バスターミナル',
+  '沖縄北ＩＣ',
+];
+
 // Haversine distance in meters
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -150,11 +164,24 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           </button>
         </div>
 
-        {showAirportShortcut && !query && (
+        {showAirportShortcut && (
           <div className="modal-section">
             <button className="btn-airport-shortcut" onClick={onSelectAirport}>
               ✈ 那覇空港（デフォルト）
             </button>
+          </div>
+        )}
+
+        {!query && !nearbyStations && (
+          <div className="modal-section">
+            <h3>主要バス停</h3>
+            <div className="popular-stops">
+              {POPULAR_STOPS.map(s => (
+                <button key={s} className="btn-popular" onClick={() => onSelect(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
