@@ -217,11 +217,41 @@ function processBuses(buses, stationName, route, group, direction) {
   return results;
 }
 
+// Run async tasks with concurrency limit
+async function runWithConcurrency(tasks, limit) {
+  const results = [];
+  let index = 0;
+
+  async function worker() {
+    while (index < tasks.length) {
+      const i = index++;
+      results[i] = await tasks[i]();
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
+  return results;
+}
+
+// Look up which route numbers serve a station (from station cache)
+function getCachedRoutesForStation(stationName) {
+  try {
+    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
+    if (cached && cached.data) {
+      const station = cached.data.find(s =>
+        s.name === stationName || s.name.includes(stationName)
+      );
+      if (station) return station.routes;
+    }
+  } catch {}
+  return null;
+}
+
 // Fetch buses for a given set of routes, filtered by station name
 async function fetchBusesForRoutes(routes, stationName, destinationName) {
   const results = [];
 
-  const promises = routes.map(async (route) => {
+  const tasks = routes.map((route) => async () => {
     try {
       const groups = await getCoursesGroup(route.keitouSid);
 
@@ -229,10 +259,8 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
         const isUp = group.Name.includes('上り');
         const direction = isUp ? 'up' : 'down';
 
-        const [buses, stations] = await Promise.all([
-          getBusLocation(route.keitouSid, group.Sid),
-          getStations(route.keitouSid, group.Sid),
-        ]);
+        // First check stations only (lighter call) before fetching bus locations
+        const stations = await getStations(route.keitouSid, group.Sid);
 
         // Check if this direction passes through the departure station
         const hasStation = stations.some(s => s.Name.includes(stationName));
@@ -247,13 +275,14 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
           const depOrder = stations.find(s => s.Name.includes(stationName))?.OrderNo;
           const destOrder = stations.find(s => s.Name.includes(destinationName))?.OrderNo;
           if (depOrder != null && destOrder != null) {
-            // OrderNo can be an array; use first value
             const depIdx = Array.isArray(depOrder) ? depOrder[0] : depOrder;
             const destIdx = Array.isArray(destOrder) ? destOrder[0] : destOrder;
             if (depIdx >= destIdx) continue; // wrong direction for this pair
           }
         }
 
+        // Only fetch bus locations after confirming route serves both stations
+        const buses = await getBusLocation(route.keitouSid, group.Sid);
         const processed = processBuses(buses, stationName, route, group, direction);
         results.push(...processed);
       }
@@ -262,7 +291,7 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
     }
   });
 
-  await Promise.all(promises);
+  await runWithConcurrency(tasks, 5);
 
   return results
     .filter(r => {
@@ -287,10 +316,17 @@ export async function getAllBuses(stationName) {
   return fetchBusesForRoutes(airportRoutes, stationName, null);
 }
 
-// Get buses between any two stations across ALL routes
+// Get buses between any two stations, pre-filtered by station cache
 export async function getBusesBetween(fromStation, toStation) {
   const allRoutes = await fetchAllRoutes();
-  return fetchBusesForRoutes(allRoutes, fromStation, toStation);
+
+  // Use cached station data to narrow down routes (avoids hundreds of API calls)
+  const knownRoutes = getCachedRoutesForStation(fromStation);
+  const routes = knownRoutes
+    ? allRoutes.filter(r => knownRoutes.includes(r.short))
+    : allRoutes;
+
+  return fetchBusesForRoutes(routes, fromStation, toStation);
 }
 
 // Backwards compatible alias
