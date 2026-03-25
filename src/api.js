@@ -188,6 +188,13 @@ function processBuses(buses, stationName, route, group, direction) {
     // Determine if bus has not departed yet (no passage data)
     const notDeparted = !busAlreadyPassed && passages.length === 0;
 
+    // If not departed and past scheduled time, mark as possibly delayed
+    // Keep ETA as 1 so it's not filtered out (actual arrival unknown)
+    if (notDeparted && etaMinutes !== null && etaMinutes <= 0) {
+      delayMinutes = Math.abs(etaMinutes);
+      etaMinutes = 1; // keep visible, show as "まもなく"
+    }
+
     results.push({
       routeKey: route.short,
       routeName: route.name,

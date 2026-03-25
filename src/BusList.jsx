@@ -64,7 +64,8 @@ function BusCard({ bus }) {
         </div>
         {bus.notDeparted ? (
           <div className="bus-position not-departed">
-            🕐 {String(bus.scheduledHour).padStart(2,'0')}:{String(bus.scheduledMinute).padStart(2,'0')}発（未出発）
+            🕐 {String(bus.scheduledHour).padStart(2,'0')}:{String(bus.scheduledMinute).padStart(2,'0')}発
+            {bus.delayMinutes > 0 ? `（遅延${bus.delayMinutes}分）` : '（未出発）'}
           </div>
         ) : bus.currentStop ? (
           <div className="bus-position">
