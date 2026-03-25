@@ -1,3 +1,33 @@
+const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
+
+function getStationCoordsFromCache(stationName) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(STATION_CACHE_KEY));
+    if (cached && cached.data) {
+      const s = cached.data.find(s => s.name === stationName || s.name.includes(stationName));
+      if (s && s.lat && s.lng) return { lat: s.lat, lng: s.lng };
+    }
+  } catch {}
+  return null;
+}
+
+function MapLink({ stationName }) {
+  const coords = getStationCoordsFromCache(stationName);
+  if (!coords) return null;
+  return (
+    <a
+      className="btn-map-inline"
+      href={`https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${stationName}をGoogleマップで表示`}
+      onClick={e => e.stopPropagation()}
+    >
+      🗺
+    </a>
+  );
+}
+
 function getStatusColor(eta) {
   if (eta === null) return 'gray';
   if (eta <= 5) return 'green';
@@ -53,6 +83,7 @@ function BusCard({ bus }) {
         ) : bus.currentStop ? (
           <div className="bus-position">
             📍 {bus.currentStop}
+            <MapLink stationName={bus.currentStop} />
             {bus.stopsAway != null && bus.stopsAway > 0 && (
               <span className="stops-away">（{bus.stopsAway}停留所前）</span>
             )}
