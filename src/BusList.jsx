@@ -25,11 +25,11 @@ function formatDelay(minutes) {
   return `${Math.abs(minutes)}分早い`;
 }
 
-function BusCard({ bus, isFirst }) {
+function BusCard({ bus }) {
   const color = getStatusColor(bus.etaMinutes);
 
   return (
-    <div className={`bus-card ${color} ${isFirst ? 'first' : ''}`}>
+    <div className={`bus-card ${color}`}>
       <div className="bus-status">
         <span className="bus-emoji">{getStatusEmoji(bus.etaMinutes)}</span>
       </div>
@@ -62,7 +62,6 @@ function BusCard({ bus, isFirst }) {
           <span className="bus-company">{bus.company}</span>
           {bus.scheduledTime && <span className="bus-scheduled">定刻 {bus.scheduledTime}</span>}
           <span className="bus-dest">→ {bus.destination}</span>
-          {isFirst && <span className="bus-fastest">← 最速</span>}
         </div>
       </div>
     </div>
@@ -81,7 +80,7 @@ export default function BusList({ buses }) {
         <div className="bus-group">
           <div className="bus-group-header">🚌 走行中</div>
           {running.map((bus, i) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} isFirst={i === 0} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
           ))}
         </div>
       )}
@@ -89,7 +88,7 @@ export default function BusList({ buses }) {
         <div className="bus-group">
           <div className="bus-group-header">🕐 まもなく出発</div>
           {notDeparted.map((bus) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} isFirst={running.length === 0} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
           ))}
         </div>
       )}
