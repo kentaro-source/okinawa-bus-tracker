@@ -135,7 +135,11 @@ function processBuses(buses, stationName, route, group, direction) {
         const actualArrival = parseNetDate(lastPassage.ArrivalTime);
         const lastSchedule = lastPassage.Schedule;
 
-        if (actualArrival && lastSchedule) {
+        // Check if bus is still at or near its origin stop (OrderNo ≤ 2)
+        // Delay data at the origin is unreliable (depot GPS, driver login timing, etc.)
+        const isNearOrigin = lastSchedule?.OrderNo != null && lastSchedule.OrderNo <= 2;
+
+        if (actualArrival && lastSchedule && !isNearOrigin) {
           // Delay = actual arrival - scheduled arrival at last stop
           const lastScheduledDate = new Date();
           lastScheduledDate.setHours(lastSchedule.ScheduledTime.Hour, lastSchedule.ScheduledTime.Minute, 0, 0);
@@ -150,9 +154,8 @@ function processBuses(buses, stationName, route, group, direction) {
           const estimatedArrival = new Date(actualArrival.getTime() + remainingScheduledMinutes * 60000);
           etaMinutes = Math.round((estimatedArrival - now) / 60000);
         } else {
-          // Fallback: use schedule + delay
-          const adjustedTime = new Date(scheduledDate.getTime() + (delayMinutes || 0) * 60000);
-          etaMinutes = Math.round((adjustedTime - now) / 60000);
+          // At origin or no valid data: use scheduled time (no delay shown)
+          etaMinutes = Math.round((scheduledDate - now) / 60000);
         }
       } else {
         // No passage data yet - use scheduled time
