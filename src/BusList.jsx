@@ -1,23 +1,9 @@
-const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
-
-function getStationCoordsFromCache(stationName) {
-  try {
-    const cached = JSON.parse(localStorage.getItem(STATION_CACHE_KEY));
-    if (cached && cached.data) {
-      const s = cached.data.find(s => s.name === stationName || s.name.includes(stationName));
-      if (s && s.lat && s.lng) return { lat: s.lat, lng: s.lng };
-    }
-  } catch {}
-  return null;
-}
-
 function MapLink({ stationName }) {
-  const coords = getStationCoordsFromCache(stationName);
-  if (!coords) return null;
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
   return (
     <a
       className="btn-map-inline"
-      href={`https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`}
+      href={url}
       target="_blank"
       rel="noopener noreferrer"
       title={`${stationName}をGoogleマップで表示`}

@@ -9,21 +9,8 @@ const FAVORITES_KEY = 'bus-tracker-favorites';
 const LAST_STATION_KEY = 'bus-tracker-last-station';
 const LAST_DEST_KEY = 'bus-tracker-last-dest';
 const DEFAULT_DEST = '那覇空港';
-const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
-
-function getStationCoords(stationName) {
-  try {
-    const cached = JSON.parse(localStorage.getItem(STATION_CACHE_KEY));
-    if (cached && cached.data) {
-      const s = cached.data.find(s => s.name === stationName || s.name.includes(stationName));
-      if (s && s.lat && s.lng) return { lat: s.lat, lng: s.lng };
-    }
-  } catch {}
-  return null;
-}
-
-function googleMapsUrl(coords, label) {
-  return `https://www.google.com/maps/search/?api=1&query=${coords.lat},${coords.lng}`;
+function googleMapsUrl(stationName) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
 }
 
 function loadFavorites() {
@@ -109,7 +96,6 @@ function App() {
   }, [station, destination, fetchBuses]);
 
   const isFavorite = favorites.includes(station);
-  const stationCoords = getStationCoords(station);
 
   // For airport mode, keep direction filter; for custom dest, show all results
   const filteredBuses = isAirport
@@ -123,17 +109,15 @@ function App() {
           <button className="header-station-btn" onClick={() => setSelectorMode('from')}>
             <span className="header-from">{station}</span>
           </button>
-          {stationCoords && (
-            <a
-              className="btn-map"
-              href={googleMapsUrl(stationCoords)}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Googleマップで表示"
-            >
-              📍
-            </a>
-          )}
+          <a
+            className="btn-map"
+            href={googleMapsUrl(station)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Googleマップで表示"
+          >
+            📍
+          </a>
           <span className="header-arrow">→</span>
           <button className="header-station-btn" onClick={() => setSelectorMode('to')}>
             <span className={`header-to ${isAirport ? '' : 'custom-dest'}`}>{destination}</span>
