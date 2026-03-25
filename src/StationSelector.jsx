@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchAllRoutes, getCoursesGroup, getStations } from './api'
+import { fetchAllRoutes, getCoursesGroup, getStations, runWithConcurrency } from './api'
 
 const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
 const OLD_CACHE_KEY = 'bus-tracker-station-cache';
@@ -67,7 +67,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       const stationSet = new Map();
 
       const allRoutes = await fetchAllRoutes();
-      const promises = allRoutes.map(async (route) => {
+      const tasks = allRoutes.map((route) => async () => {
         try {
           const groups = await getCoursesGroup(route.keitouSid);
           for (const group of groups) {
@@ -87,7 +87,6 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 if (!existing.routes.includes(route.short)) {
                   existing.routes.push(route.short);
                 }
-                // Update coordinates if missing
                 if (!existing.lat && s.Latitude) {
                   existing.lat = s.Latitude;
                   existing.lng = s.Longitude;
@@ -98,7 +97,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
         } catch {}
       });
 
-      await Promise.all(promises);
+      await runWithConcurrency(tasks, 5);
       const result = Array.from(stationSet.values()).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
       setAllStations(result);
       saveStationCache(result);

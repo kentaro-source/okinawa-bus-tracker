@@ -218,7 +218,7 @@ function processBuses(buses, stationName, route, group, direction) {
 }
 
 // Run async tasks with concurrency limit
-async function runWithConcurrency(tasks, limit) {
+export async function runWithConcurrency(tasks, limit) {
   const results = [];
   let index = 0;
 
