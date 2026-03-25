@@ -188,6 +188,27 @@ body {
   gap: 8px;
 }
 
+.bus-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bus-group-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 4px 0;
+}
+
+.bus-group + .bus-group {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bg3);
+}
+
 .bus-card {
   display: flex;
   align-items: center;

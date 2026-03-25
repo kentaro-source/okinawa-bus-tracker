@@ -260,8 +260,16 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
   await Promise.all(promises);
 
   return results
-    .filter(r => r.etaMinutes !== -1)
+    .filter(r => {
+      // Remove passed buses
+      if (r.etaMinutes !== null && r.etaMinutes <= 0) return false;
+      // Remove 未出発 buses more than 60 minutes away
+      if (r.notDeparted && r.etaMinutes !== null && r.etaMinutes > 60) return false;
+      return true;
+    })
     .sort((a, b) => {
+      // 走行中 first, 未出発 second
+      if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
       if (a.etaMinutes === null) return 1;
       if (b.etaMinutes === null) return -1;
       return a.etaMinutes - b.etaMinutes;
