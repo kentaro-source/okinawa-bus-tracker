@@ -59,12 +59,26 @@ body {
   color: var(--accent);
 }
 
+.header-swap-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.header-swap-btn:active {
+  background: var(--bg3);
+}
+
 .header-arrow {
   color: var(--text2);
+  font-size: 20px;
 }
 
 .header-to {
-  color: var(--text);
+  color: var(--accent);
 }
 
 .header-station-btn {

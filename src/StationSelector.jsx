@@ -172,19 +172,6 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           </div>
         )}
 
-        {!query && !nearbyStations && (
-          <div className="modal-section">
-            <h3>主要バス停</h3>
-            <div className="popular-stops">
-              {POPULAR_STOPS.map(s => (
-                <button key={s} className="btn-popular" onClick={() => onSelect(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {favorites.length > 0 && !query && !nearbyStations && (
           <div className="modal-section">
             <h3>お気に入り</h3>
@@ -195,6 +182,19 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 </button>
               </div>
             ))}
+          </div>
+        )}
+
+        {!query && !nearbyStations && (
+          <div className="modal-section">
+            <h3>主要バス停</h3>
+            <div className="popular-stops">
+              {POPULAR_STOPS.map(s => (
+                <button key={s} className="btn-popular" onClick={() => onSelect(s)}>
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 

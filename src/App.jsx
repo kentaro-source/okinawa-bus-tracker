@@ -106,7 +106,16 @@ function App() {
           <button className="header-station-btn" onClick={() => setSelectorMode('from')}>
             <span className="header-from">{station}</span>
           </button>
-          <span className="header-arrow">→</span>
+          <button className="header-swap-btn" onClick={() => {
+            const newFrom = destination;
+            const newTo = station;
+            setStation(newFrom);
+            setDestination(newTo);
+            localStorage.setItem(LAST_STATION_KEY, newFrom);
+            localStorage.setItem(LAST_DEST_KEY, newTo);
+          }} title="出発地と目的地を入れ替え">
+            <span className="header-arrow">⇄</span>
+          </button>
           <button className="header-station-btn" onClick={() => setSelectorMode('to')}>
             <span className={`header-to ${isAirport ? '' : 'custom-dest'}`}>{destination}</span>
           </button>
