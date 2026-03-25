@@ -174,12 +174,14 @@ function processBuses(buses, stationName, route, group, direction) {
     let stopsAway = null;
     if (!busAlreadyPassed && passages.length > 0) {
       const lastPassage = passages[passages.length - 1];
-      currentStop = lastPassage.Station.ShortName || lastPassage.Station.Name.replace(/（.*?）$/, '');
-      // Count stops between last passage and our station in the schedule
       const lastPassageOrder = lastPassage.Schedule?.OrderNo;
-      const ourOrder = stationSchedule.OrderNo;
-      if (lastPassageOrder != null && ourOrder != null) {
-        stopsAway = ourOrder - lastPassageOrder;
+      // Skip unreliable position data near origin (OrderNo ≤ 2)
+      if (lastPassageOrder == null || lastPassageOrder > 2) {
+        currentStop = lastPassage.Station.ShortName || lastPassage.Station.Name.replace(/（.*?）$/, '');
+        const ourOrder = stationSchedule.OrderNo;
+        if (lastPassageOrder != null && ourOrder != null) {
+          stopsAway = ourOrder - lastPassageOrder;
+        }
       }
     }
 
