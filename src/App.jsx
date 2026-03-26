@@ -45,6 +45,11 @@ function App() {
   const fetchBuses = useCallback(async (from, to) => {
     try {
       setError(null);
+      if (from === to) {
+        setBuses([]);
+        setLastUpdate(new Date());
+        return;
+      }
       const data = to === DEFAULT_DEST
         ? await getAllBuses(from)
         : await getBusesBetween(from, to);
@@ -109,15 +114,7 @@ function App() {
           <button className="header-station-btn" onClick={() => setSelectorMode('from')}>
             <span className="header-from">{station}</span>
           </button>
-          <a
-            className="btn-map"
-            href={googleMapsUrl(station)}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Googleマップで表示"
-          >
-            📍
-          </a>
+          <a className="btn-map-icon" href={googleMapsUrl(station)} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
           <button className="header-swap-btn" onClick={() => {
             const newFrom = destination;
             const newTo = station;
@@ -126,16 +123,12 @@ function App() {
             localStorage.setItem(LAST_STATION_KEY, newFrom);
             localStorage.setItem(LAST_DEST_KEY, newTo);
           }} title="出発地と目的地を入れ替え">
-            <span className="header-arrow">⇄</span>
+            <span className="header-arrow">→</span>
           </button>
           <button className="header-station-btn" onClick={() => setSelectorMode('to')}>
             <span className={`header-to ${isAirport ? '' : 'custom-dest'}`}>{destination}</span>
           </button>
-          {!isAirport && (
-            <button className="btn-reset-dest" onClick={resetToAirport} title="空港行きに戻す">
-              ✈
-            </button>
-          )}
+          <a className="btn-map-icon" href={googleMapsUrl(destination)} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
           <button
             className={`btn-fav ${isFavorite ? 'is-fav' : ''}`}
             onClick={() => toggleFavorite(station)}
@@ -196,8 +189,14 @@ function App() {
           favorites={favorites}
           onToggleFavorite={toggleFavorite}
           title={selectorMode === 'from' ? '出発バス停を選択' : '目的バス停を選択'}
-          showAirportShortcut={selectorMode === 'to'}
-          onSelectAirport={selectorMode === 'to' ? resetToAirport : null}
+          showAirportShortcut={true}
+          onSelectAirport={() => {
+            if (selectorMode === 'from') {
+              changeStation('那覇空港');
+            } else {
+              resetToAirport();
+            }
+          }}
         />
       )}
     </div>

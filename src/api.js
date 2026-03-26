@@ -5,6 +5,33 @@ export const AIRPORT_ROUTE_NUMBERS = new Set([
   '26', '95', '99', '111', '113', '117', '120', '123', '125', '127', '132', '143', '189', '190',
 ]);
 
+// バス停名のエイリアス（UIで使う名前 → APIの実際の名前）
+const STATION_ALIASES = {
+  '那覇空港': ['旅客ターミナル前'],
+};
+
+// 括弧内の方向表記を除外してバス停名の本体だけ取得
+function getBaseName(name) {
+  return name.replace(/（.*?）/g, '').replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim();
+}
+
+// バス停マッチング: 括弧内を除外し、エイリアスも考慮
+function matchStation(stationName, targetName) {
+  const base = getBaseName(targetName);
+  // 完全一致
+  if (base === stationName) return true;
+  // 前方一致（通り除外）
+  if (base.startsWith(stationName) && !base.slice(stationName.length).startsWith('通り')) return true;
+  // 部分一致（baseのみ）
+  if (base.includes(stationName)) return true;
+  // エイリアスチェック
+  const aliases = STATION_ALIASES[stationName];
+  if (aliases) {
+    return aliases.some(alias => base.includes(alias));
+  }
+  return false;
+}
+
 // Cache for the full route list
 const ROUTE_LIST_CACHE_KEY = 'bus-tracker-route-list';
 let routeListCache = null;
@@ -105,9 +132,8 @@ function processBuses(buses, stationName, route, group, direction) {
     const schedules = bus.Daiya.PassedSchedules || [];
     const passages = bus.Passages || [];
 
-    // Find when bus is scheduled at our station (exact match first)
-    const stationSchedule = schedules.find(s => s.Station.Name === stationName)
-      || schedules.find(s => s.Station.Name.includes(stationName));
+    // Find when bus is scheduled at our station (using base name matching + aliases)
+    const stationSchedule = schedules.find(s => matchStation(stationName, s.Station.Name));
 
     // If this route doesn't pass through our station (in this direction), skip
     if (!stationSchedule) continue;
@@ -180,9 +206,9 @@ function processBuses(buses, stationName, route, group, direction) {
       // Calculate stopsAway first (HEAD bug fix: skip buses with negative stopsAway)
       if (lastPassageOrder != null && ourOrder != null) {
         stopsAway = ourOrder - lastPassageOrder;
-        // If stopsAway is negative or zero, the bus hasn't started this trip yet
+        // If stopsAway is negative, the bus hasn't started this trip yet
         // (it's still on the inbound trip heading to the origin)
-        if (stopsAway <= 0) continue;
+        if (stopsAway < 0) continue;
       }
 
       // Skip unreliable position data near origin (OrderNo ≤ 2)
@@ -275,24 +301,30 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
         // First check stations only (lighter call) before fetching bus locations
         const stations = await getStations(route.keitouSid, group.Sid);
 
-        // Match station by exact name first, then by includes
-        const findStation = (name) => stations.find(s => s.Name === name) || stations.find(s => s.Name.includes(name));
-        const depStation = findStation(stationName);
-        if (!depStation) continue;
+        // Match stations using base name matching (excludes parenthetical direction info)
+        const findMatchingStations = (name) => stations.filter(s => matchStation(name, s.Name));
+        const getOrderNo = (s) => {
+          const o = s.OrderNo;
+          return o != null ? (Array.isArray(o) ? o[0] : o) : null;
+        };
+
+        const depStations = findMatchingStations(stationName);
+        if (depStations.length === 0) continue;
 
         // If destination specified, check if this direction also passes through it
         if (destinationName) {
-          const destStation = findStation(destinationName);
-          if (!destStation) continue;
+          const destStations = findMatchingStations(destinationName);
+          if (destStations.length === 0) continue;
 
-          // Ensure departure comes before destination in the route order
-          const depOrder = depStation.OrderNo;
-          const destOrder = destStation.OrderNo;
-          if (depOrder != null && destOrder != null) {
-            const depIdx = Array.isArray(depOrder) ? depOrder[0] : depOrder;
-            const destIdx = Array.isArray(destOrder) ? destOrder[0] : destOrder;
-            if (depIdx >= destIdx) continue; // wrong direction for this pair
-          }
+          // Check if ANY combination of dep/dest has correct order (dep before dest)
+          const hasValidPair = depStations.some(ds => {
+            const depIdx = getOrderNo(ds);
+            return destStations.some(dest => {
+              const destIdx = getOrderNo(dest);
+              return depIdx == null || destIdx == null || depIdx < destIdx;
+            });
+          });
+          if (!hasValidPair) continue;
         }
 
         // Only fetch bus locations after confirming route serves both stations

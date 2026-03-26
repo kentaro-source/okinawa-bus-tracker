@@ -166,7 +166,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
         {showAirportShortcut && (
           <div className="modal-section">
             <button className="btn-airport-shortcut" onClick={onSelectAirport}>
-              ✈ 那覇空港（デフォルト）
+              ✈ 那覇空港
             </button>
           </div>
         )}
