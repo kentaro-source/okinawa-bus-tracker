@@ -37,7 +37,13 @@
 - 上り/下りバス停の区別が未実装
 - バス停キャッシュがない初回は全路線スキャンに時間がかかる
 
+## コミュニケーション方針
+- やり取りで得た方針・学びはこのCLAUDE.mdに自動追記する（PC間共有のため）
+- 応答は簡潔に。長い説明は不要
+- 日本語でやり取り
+
 ## Git運用
 - ブランチ: `claude/intelligent-mirzakhani`
 - Cloudflare Pagesで自動デプロイ
 - PR: https://github.com/kentaro-source/okinawa-bus-tracker/pull/1
+- Git設定: kentaro-source / kentaro@kawagoe-sangyoui.com
