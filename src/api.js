@@ -105,17 +105,17 @@ function processBuses(buses, stationName, route, group, direction) {
     const schedules = bus.Daiya.PassedSchedules || [];
     const passages = bus.Passages || [];
 
-    // Find when bus is scheduled at our station
-    const stationSchedule = schedules.find(s =>
-      s.Station.Name.includes(stationName)
-    );
+    // Find when bus is scheduled at our station (exact match first)
+    const stationSchedule = schedules.find(s => s.Station.Name === stationName)
+      || schedules.find(s => s.Station.Name.includes(stationName));
 
     // If this route doesn't pass through our station (in this direction), skip
     if (!stationSchedule) continue;
 
-    // Check if bus already passed our station
+    // Check if bus already passed our station (match same station as schedule)
+    const matchedStationName = stationSchedule.Station.Name;
     const stationPassage = passages.find(p =>
-      p.Station.Name.includes(stationName)
+      p.Station.Name === matchedStationName
     );
     const busAlreadyPassed = !!stationPassage;
 
@@ -177,6 +177,9 @@ function processBuses(buses, stationName, route, group, direction) {
       const ourOrder = stationSchedule.OrderNo;
       if (lastPassageOrder != null && ourOrder != null) {
         stopsAway = ourOrder - lastPassageOrder;
+        // If stopsAway is negative or zero, the bus hasn't started this trip yet
+        // (it's still on the inbound trip heading to the origin)
+        if (stopsAway <= 0) continue;
       }
     }
 
@@ -199,7 +202,7 @@ function processBuses(buses, stationName, route, group, direction) {
       scheduledHour: stationSchedule.ScheduledTime.Hour,
       scheduledMinute: stationSchedule.ScheduledTime.Minute,
       etaMinutes,
-      delayMinutes: delayMinutes || 0,
+      delayMinutes: notDeparted ? 0 : (delayMinutes || 0),
       passed: busAlreadyPassed,
       notDeparted,
       destination,
@@ -229,18 +232,19 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
           getStations(route.keitouSid, group.Sid),
         ]);
 
-        // Check if this direction passes through the departure station
-        const hasStation = stations.some(s => s.Name.includes(stationName));
-        if (!hasStation) continue;
+        // Match station by exact name first, then by includes
+        const findStation = (name) => stations.find(s => s.Name === name) || stations.find(s => s.Name.includes(name));
+        const depStation = findStation(stationName);
+        if (!depStation) continue;
 
         // If destination specified, check if this direction also passes through it
         if (destinationName) {
-          const hasDestination = stations.some(s => s.Name.includes(destinationName));
-          if (!hasDestination) continue;
+          const destStation = findStation(destinationName);
+          if (!destStation) continue;
 
           // Ensure departure comes before destination in the route order
-          const depOrder = stations.find(s => s.Name.includes(stationName))?.OrderNo;
-          const destOrder = stations.find(s => s.Name.includes(destinationName))?.OrderNo;
+          const depOrder = depStation.OrderNo;
+          const destOrder = destStation.OrderNo;
           if (depOrder != null && destOrder != null) {
             // OrderNo can be an array; use first value
             const depIdx = Array.isArray(depOrder) ? depOrder[0] : depOrder;
@@ -274,10 +278,12 @@ export async function getAllBuses(stationName) {
   return fetchBusesForRoutes(airportRoutes, stationName, null);
 }
 
-// Get buses between any two stations across ALL routes
+// Get buses between any two stations
 export async function getBusesBetween(fromStation, toStation) {
-  const allRoutes = await fetchAllRoutes();
-  return fetchBusesForRoutes(allRoutes, fromStation, toStation);
+  // If either station involves the airport, limit to airport routes for accuracy
+  const isAirportInvolved = fromStation.includes('那覇空港') || toStation.includes('那覇空港');
+  const routes = isAirportInvolved ? await getAirportRoutes() : await fetchAllRoutes();
+  return fetchBusesForRoutes(routes, fromStation, toStation);
 }
 
 // Backwards compatible alias

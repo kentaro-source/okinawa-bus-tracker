@@ -24,10 +24,10 @@ function saveFavorites(favs) {
 
 function App() {
   const [station, setStation] = useState(() =>
-    localStorage.getItem(LAST_STATION_KEY) || '那覇バスターミナル'
+    localStorage.getItem(LAST_STATION_KEY) || '那覇空港'
   );
   const [destination, setDestination] = useState(() =>
-    localStorage.getItem(LAST_DEST_KEY) || DEFAULT_DEST
+    localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル'
   );
   const [buses, setBuses] = useState([]);
   const [loading, setLoading] = useState(true);

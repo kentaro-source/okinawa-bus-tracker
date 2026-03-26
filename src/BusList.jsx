@@ -1,3 +1,7 @@
+function mapsUrl(name) {
+  return `https://www.google.com/maps/search/${encodeURIComponent(name + ' 沖縄')}`;
+}
+
 function getStatusColor(eta) {
   if (eta === null) return 'gray';
   if (eta <= 5) return 'green';
@@ -46,7 +50,7 @@ export default function BusList({ buses }) {
               </div>
               <div className="bus-eta">
                 <span className="eta-time">{formatETA(bus.etaMinutes)}</span>
-                {bus.delayMinutes !== 0 && (
+                {bus.delayMinutes !== 0 && !bus.notDeparted && bus.stopsAway != null && bus.stopsAway <= 10 && (
                   <span className={`eta-delay ${bus.delayMinutes > 0 ? 'late' : 'early'}`}>
                     ({formatDelay(bus.delayMinutes)})
                   </span>
@@ -58,7 +62,7 @@ export default function BusList({ buses }) {
                 </div>
               ) : bus.currentStop ? (
                 <div className="bus-position">
-                  📍 {bus.currentStop}
+                  📍 <a href={mapsUrl(bus.currentStop)} target="_blank" rel="noopener noreferrer" className="map-link">{bus.currentStop}</a>
                   {bus.stopsAway != null && bus.stopsAway > 0 && (
                     <span className="stops-away">（{bus.stopsAway}停留所前）</span>
                   )}
@@ -67,7 +71,7 @@ export default function BusList({ buses }) {
               <div className="bus-detail">
                 <span className="bus-company">{bus.company}</span>
                 {bus.scheduledTime && <span className="bus-scheduled">定刻 {bus.scheduledTime}</span>}
-                <span className="bus-dest">→ {bus.destination}</span>
+                <span className="bus-dest">→ <a href={mapsUrl(bus.destination)} target="_blank" rel="noopener noreferrer" className="map-link">{bus.destination}</a></span>
                 {isFirst && <span className="bus-fastest">← 最速</span>}
               </div>
             </div>

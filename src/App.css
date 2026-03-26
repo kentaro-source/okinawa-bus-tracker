@@ -291,6 +291,12 @@ body {
   color: var(--text2);
 }
 
+.map-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .bus-detail {
   display: flex;
   align-items: center;
