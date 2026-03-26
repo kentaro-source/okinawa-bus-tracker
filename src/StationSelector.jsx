@@ -147,8 +147,12 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
 
   const filtered = query
     ? (() => {
-        // よみがなエイリアスで変換（例: よみたん→読谷）
-        const aliasQuery = READING_ALIASES[query] || READING_ALIASES[toHiragana(query)];
+        // よみがなエイリアスで変換（前方一致: よみ→読谷、ちゃ→北谷）
+        const hiraQuery = toHiragana(query);
+        const aliasMatches = Object.entries(READING_ALIASES)
+          .filter(([key]) => key.startsWith(hiraQuery))
+          .map(([, val]) => val);
+        const aliasQuery = aliasMatches.length > 0 ? aliasMatches : null;
         const katakanaQuery = toKatakana(query);
         const hiraganaQuery = toHiragana(query);
 
@@ -158,13 +162,13 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           if (name.includes(query)) return true;
           if (name.includes(katakanaQuery)) return true;
           if (name.includes(hiraganaQuery)) return true;
-          if (aliasQuery && name.includes(aliasQuery)) return true;
+          if (aliasQuery && aliasQuery.some(a => name.includes(a))) return true;
           return false;
         }).sort((a, b) => {
-          const q = aliasQuery || query;
           // クエリとの前方一致を優先
-          const aStarts = a.name.startsWith(q) || a.name.startsWith(katakanaQuery);
-          const bStarts = b.name.startsWith(q) || b.name.startsWith(katakanaQuery);
+          const q = aliasQuery ? aliasQuery[0] : query;
+          const aStarts = a.name.startsWith(q) || a.name.startsWith(katakanaQuery) || (aliasQuery && aliasQuery.some(a2 => a.name.startsWith(a2)));
+          const bStarts = b.name.startsWith(q) || b.name.startsWith(katakanaQuery) || (aliasQuery && aliasQuery.some(a2 => b.name.startsWith(a2)));
           if (aStarts !== bStarts) return aStarts ? -1 : 1;
           // バスターミナル・駅を優先
           const aHub = /ターミナル|駅前|空港/.test(a.name);
