@@ -111,7 +111,8 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           for (const group of groups) {
             const stations = await getStations(route.keitouSid, group.Sid);
             for (const s of stations) {
-              const cleanName = s.Name.replace(/（.*?）$/, '').trim();
+              // 括弧（全角・半角両方）を除去してバス停名を正規化
+              const cleanName = s.Name.replace(/（.*?）/g, '').replace(/\(.*?\)/g, '').trim();
               if (!stationSet.has(cleanName)) {
                 stationSet.set(cleanName, {
                   name: cleanName,
@@ -136,6 +137,33 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       });
 
       await runWithConcurrency(tasks, 5);
+
+      // 類似名の統合（「那覇バスターミナル前」→「那覇バスターミナル」に吸収）
+      const names = Array.from(stationSet.keys()).sort((a, b) => a.length - b.length);
+      for (const shorter of names) {
+        for (const longer of names) {
+          if (shorter === longer) continue;
+          if (longer.startsWith(shorter) && longer.length - shorter.length <= 2) {
+            const suffix = longer.slice(shorter.length);
+            if (/^(前|口|下)$/.test(suffix)) {
+              // 短い方に統合
+              const shortEntry = stationSet.get(shorter);
+              const longEntry = stationSet.get(longer);
+              if (shortEntry && longEntry) {
+                for (const r of longEntry.routes) {
+                  if (!shortEntry.routes.includes(r)) shortEntry.routes.push(r);
+                }
+                if (!shortEntry.lat && longEntry.lat) {
+                  shortEntry.lat = longEntry.lat;
+                  shortEntry.lng = longEntry.lng;
+                }
+                stationSet.delete(longer);
+              }
+            }
+          }
+        }
+      }
+
       const result = Array.from(stationSet.values()).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
       setAllStations(result);
       saveStationCache(result);
