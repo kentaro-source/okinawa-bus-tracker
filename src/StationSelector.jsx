@@ -42,6 +42,44 @@ function saveStationCache(data) {
   localStorage.setItem(STATION_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
 }
 
+// ひらがな→カタカナ変換
+function toKatakana(str) {
+  return str.replace(/[\u3041-\u3096]/g, ch =>
+    String.fromCharCode(ch.charCodeAt(0) + 0x60)
+  );
+}
+
+// カタカナ→ひらがな変換
+function toHiragana(str) {
+  return str.replace(/[\u30A1-\u30F6]/g, ch =>
+    String.fromCharCode(ch.charCodeAt(0) - 0x60)
+  );
+}
+
+// 主要バス停のよみがなエイリアス（ひらがな検索用）
+const READING_ALIASES = {
+  'よみたん': '読谷',
+  'なは': '那覇',
+  'ちゃたん': '北谷',
+  'ぎのわん': '宜野湾',
+  'うらそえ': '浦添',
+  'なご': '名護',
+  'おきなわ': '沖縄',
+  'かでな': '嘉手納',
+  'まきし': '牧志',
+  'とまりん': '泊高橋',
+  'ふてんま': '普天間',
+  'こざ': 'コザ',
+  'おもろまち': 'おもろまち',
+  'しゅり': '首里',
+  'いとまん': '糸満',
+  'とみぐすく': '豊見城',
+  'にしはら': '西原',
+  'ぎのざ': '宜野座',
+  'きん': '金武',
+  'おんな': '恩納',
+};
+
 export default function StationSelector({ onSelect, onClose, favorites, onToggleFavorite, title = 'バス停を選択', showAirportShortcut, onSelectAirport }) {
   const [query, setQuery] = useState('');
   const [allStations, setAllStations] = useState([]);
@@ -108,7 +146,26 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
   }, []);
 
   const filtered = query
-    ? allStations.filter(s => s.name.includes(query) || s.fullName.includes(query))
+    ? (() => {
+        // よみがなエイリアスで変換（例: よみたん→読谷）
+        const aliasQuery = READING_ALIASES[query] || READING_ALIASES[toHiragana(query)];
+        const katakanaQuery = toKatakana(query);
+        const hiraganaQuery = toHiragana(query);
+
+        return allStations.filter(s => {
+          const name = s.name;
+          const fullName = s.fullName;
+          // 元のクエリで一致
+          if (name.includes(query) || fullName.includes(query)) return true;
+          // カタカナ変換で一致（ひらがな入力→カタカナバス停名）
+          if (name.includes(katakanaQuery) || fullName.includes(katakanaQuery)) return true;
+          // ひらがな変換で一致（カタカナ入力→ひらがなバス停名）
+          if (name.includes(hiraganaQuery) || fullName.includes(hiraganaQuery)) return true;
+          // よみがなエイリアスで一致
+          if (aliasQuery && (name.includes(aliasQuery) || fullName.includes(aliasQuery))) return true;
+          return false;
+        });
+      })()
     : allStations;
 
   const handleGeolocate = () => {
