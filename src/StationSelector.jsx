@@ -111,8 +111,12 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           for (const group of groups) {
             const stations = await getStations(route.keitouSid, group.Sid);
             for (const s of stations) {
-              // 括弧（全角・半角両方）を除去してバス停名を正規化
-              const cleanName = s.Name.replace(/（.*?）/g, '').replace(/\(.*?\)/g, '').trim();
+              // 括弧・乗り場番号を除去してバス停名を正規化
+              const cleanName = s.Name
+                .replace(/（.*?）/g, '').replace(/\(.*?\)/g, '')
+                .replace(/[\s　]+(おりば|のりば|乗り場|乗場)[\s　]*\S*/g, '')
+                .replace(/[\s　]+[A-Za-z0-9０-９]+$/g, '')
+                .trim();
               if (!stationSet.has(cleanName)) {
                 stationSet.set(cleanName, {
                   name: cleanName,
