@@ -9,6 +9,9 @@ const FAVORITES_KEY = 'bus-tracker-favorites';
 const LAST_STATION_KEY = 'bus-tracker-last-station';
 const LAST_DEST_KEY = 'bus-tracker-last-dest';
 const DEFAULT_DEST = '那覇空港';
+function googleMapsUrl(stationName) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
+}
 
 function loadFavorites() {
   try {
@@ -106,6 +109,15 @@ function App() {
           <button className="header-station-btn" onClick={() => setSelectorMode('from')}>
             <span className="header-from">{station}</span>
           </button>
+          <a
+            className="btn-map"
+            href={googleMapsUrl(station)}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Googleマップで表示"
+          >
+            📍
+          </a>
           <button className="header-swap-btn" onClick={() => {
             const newFrom = destination;
             const newTo = station;

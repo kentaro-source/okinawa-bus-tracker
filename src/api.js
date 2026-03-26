@@ -135,7 +135,11 @@ function processBuses(buses, stationName, route, group, direction) {
         const actualArrival = parseNetDate(lastPassage.ArrivalTime);
         const lastSchedule = lastPassage.Schedule;
 
-        if (actualArrival && lastSchedule) {
+        // Check if bus is still at or near its origin stop (OrderNo ≤ 2)
+        // Delay data at the origin is unreliable (depot GPS, driver login timing, etc.)
+        const isNearOrigin = lastSchedule?.OrderNo != null && lastSchedule.OrderNo <= 2;
+
+        if (actualArrival && lastSchedule && !isNearOrigin) {
           // Delay = actual arrival - scheduled arrival at last stop
           const lastScheduledDate = new Date();
           lastScheduledDate.setHours(lastSchedule.ScheduledTime.Hour, lastSchedule.ScheduledTime.Minute, 0, 0);
@@ -150,9 +154,8 @@ function processBuses(buses, stationName, route, group, direction) {
           const estimatedArrival = new Date(actualArrival.getTime() + remainingScheduledMinutes * 60000);
           etaMinutes = Math.round((estimatedArrival - now) / 60000);
         } else {
-          // Fallback: use schedule + delay
-          const adjustedTime = new Date(scheduledDate.getTime() + (delayMinutes || 0) * 60000);
-          etaMinutes = Math.round((adjustedTime - now) / 60000);
+          // At origin or no valid data: use scheduled time (no delay shown)
+          etaMinutes = Math.round((scheduledDate - now) / 60000);
         }
       } else {
         // No passage data yet - use scheduled time
@@ -171,20 +174,32 @@ function processBuses(buses, stationName, route, group, direction) {
     let stopsAway = null;
     if (!busAlreadyPassed && passages.length > 0) {
       const lastPassage = passages[passages.length - 1];
-      currentStop = lastPassage.Station.ShortName || lastPassage.Station.Name.replace(/（.*?）$/, '');
-      // Count stops between last passage and our station in the schedule
       const lastPassageOrder = lastPassage.Schedule?.OrderNo;
       const ourOrder = stationSchedule.OrderNo;
+
+      // Calculate stopsAway first (HEAD bug fix: skip buses with negative stopsAway)
       if (lastPassageOrder != null && ourOrder != null) {
         stopsAway = ourOrder - lastPassageOrder;
         // If stopsAway is negative or zero, the bus hasn't started this trip yet
         // (it's still on the inbound trip heading to the origin)
         if (stopsAway <= 0) continue;
       }
+
+      // Skip unreliable position data near origin (OrderNo ≤ 2)
+      if (lastPassageOrder == null || lastPassageOrder > 2) {
+        currentStop = lastPassage.Station.ShortName || lastPassage.Station.Name.replace(/（.*?）$/, '');
+      }
     }
 
     // Determine if bus has not departed yet (no passage data)
     const notDeparted = !busAlreadyPassed && passages.length === 0;
+
+    // If not departed and past scheduled time, mark as possibly delayed
+    // Keep ETA as 1 so it's not filtered out (actual arrival unknown)
+    if (notDeparted && etaMinutes !== null && etaMinutes <= 0) {
+      delayMinutes = Math.abs(etaMinutes);
+      etaMinutes = 1; // keep visible, show as "まもなく"
+    }
 
     results.push({
       routeKey: route.short,
@@ -215,11 +230,41 @@ function processBuses(buses, stationName, route, group, direction) {
   return results;
 }
 
+// Run async tasks with concurrency limit
+export async function runWithConcurrency(tasks, limit) {
+  const results = [];
+  let index = 0;
+
+  async function worker() {
+    while (index < tasks.length) {
+      const i = index++;
+      results[i] = await tasks[i]();
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, () => worker()));
+  return results;
+}
+
+// Look up which route numbers serve a station (from station cache)
+function getCachedRoutesForStation(stationName) {
+  try {
+    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
+    if (cached && cached.data) {
+      const station = cached.data.find(s =>
+        s.name === stationName || s.name.includes(stationName)
+      );
+      if (station) return station.routes;
+    }
+  } catch {}
+  return null;
+}
+
 // Fetch buses for a given set of routes, filtered by station name
 async function fetchBusesForRoutes(routes, stationName, destinationName) {
   const results = [];
 
-  const promises = routes.map(async (route) => {
+  const tasks = routes.map((route) => async () => {
     try {
       const groups = await getCoursesGroup(route.keitouSid);
 
@@ -227,10 +272,8 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
         const isUp = group.Name.includes('上り');
         const direction = isUp ? 'up' : 'down';
 
-        const [buses, stations] = await Promise.all([
-          getBusLocation(route.keitouSid, group.Sid),
-          getStations(route.keitouSid, group.Sid),
-        ]);
+        // First check stations only (lighter call) before fetching bus locations
+        const stations = await getStations(route.keitouSid, group.Sid);
 
         // Match station by exact name first, then by includes
         const findStation = (name) => stations.find(s => s.Name === name) || stations.find(s => s.Name.includes(name));
@@ -246,13 +289,14 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
           const depOrder = depStation.OrderNo;
           const destOrder = destStation.OrderNo;
           if (depOrder != null && destOrder != null) {
-            // OrderNo can be an array; use first value
             const depIdx = Array.isArray(depOrder) ? depOrder[0] : depOrder;
             const destIdx = Array.isArray(destOrder) ? destOrder[0] : destOrder;
             if (depIdx >= destIdx) continue; // wrong direction for this pair
           }
         }
 
+        // Only fetch bus locations after confirming route serves both stations
+        const buses = await getBusLocation(route.keitouSid, group.Sid);
         const processed = processBuses(buses, stationName, route, group, direction);
         results.push(...processed);
       }
@@ -261,11 +305,19 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
     }
   });
 
-  await Promise.all(promises);
+  await runWithConcurrency(tasks, 5);
 
   return results
-    .filter(r => r.etaMinutes !== -1)
+    .filter(r => {
+      // Remove passed buses
+      if (r.etaMinutes !== null && r.etaMinutes <= 0) return false;
+      // Remove 未出発 buses more than 60 minutes away
+      if (r.notDeparted && r.etaMinutes !== null && r.etaMinutes > 60) return false;
+      return true;
+    })
     .sort((a, b) => {
+      // 走行中 first, 未出発 second
+      if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
       if (a.etaMinutes === null) return 1;
       if (b.etaMinutes === null) return -1;
       return a.etaMinutes - b.etaMinutes;
@@ -278,11 +330,24 @@ export async function getAllBuses(stationName) {
   return fetchBusesForRoutes(airportRoutes, stationName, null);
 }
 
-// Get buses between any two stations
+// Get buses between any two stations, pre-filtered by station cache
 export async function getBusesBetween(fromStation, toStation) {
   // If either station involves the airport, limit to airport routes for accuracy
   const isAirportInvolved = fromStation.includes('那覇空港') || toStation.includes('那覇空港');
-  const routes = isAirportInvolved ? await getAirportRoutes() : await fetchAllRoutes();
+
+  if (isAirportInvolved) {
+    const routes = await getAirportRoutes();
+    return fetchBusesForRoutes(routes, fromStation, toStation);
+  }
+
+  const allRoutes = await fetchAllRoutes();
+
+  // Use cached station data to narrow down routes (avoids hundreds of API calls)
+  const knownRoutes = getCachedRoutesForStation(fromStation);
+  const routes = knownRoutes
+    ? allRoutes.filter(r => knownRoutes.includes(r.short))
+    : allRoutes;
+
   return fetchBusesForRoutes(routes, fromStation, toStation);
 }
 

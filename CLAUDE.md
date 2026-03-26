@@ -1,4 +1,4 @@
-# バスどこ沖縄
+# バスどこ沖縄 - プロジェクト方針
 
 ## 概要
 沖縄のバスリアルタイム位置情報アプリ（PWA + TWA）
@@ -6,18 +6,41 @@
 - デプロイ: Cloudflare Pages (`okinawa-bus.pages.dev`)
 - データソース: busnavi-okinawa.com API
 - ビルド: `npm run build` → `npx wrangler pages deploy dist --project-name=okinawa-bus --branch=main --commit-dirty=true`
+- 県外観光客が主要ターゲット。Googleマップで乗換案内→このアプリで遅延確認→地図でバス停へ、の導線。
 
 ## 技術スタック
-- React + Vite
-- Cloudflare Pages（ホスティング + CORSプロキシ）
-- PWA（Service Worker + manifest.json）
-- TWA（Android APK via PWABuilder）
+- React + Vite（SPA）
+- Cloudflare Pages + Functions（APIプロキシ）
+- PWA対応（TWA含む）
+
+## アーキテクチャ
+- `src/api.js` — バスナビ沖縄APIとの通信、バスデータ加工。同時リクエスト5並列制限。
+- `src/App.jsx` — メイン画面。出発/行先選択、バス一覧表示、45秒自動更新。
+- `src/BusList.jsx` — バスカード表示。走行中/未出発のグループ分け。
+- `src/StationSelector.jsx` — バス停選択UI。全路線スキャンでキャッシュ構築（24時間TTL）。
+- `functions/api/` — Cloudflare Functionsプロキシ（CORS回避）。
+
+## API仕様
+- ベースURL: `busnavi-okinawa.com`（Cloudflare Functions経由で `/api/*` にプロキシ）
+- 主要エンドポイント: GetRouteList, GetCoursesGroup, GetStations, GetBusLocation
+- バス停キャッシュ: localStorage `bus-tracker-station-cache-v2`（全路線の全停留所を集約）
 
 ## 主要な設計判断
 - 全プロジェクトPWA + TWA統一方針（修正はサイトデプロイのみで反映）
 - デフォルト: 出発=那覇空港、目的地=那覇バスターミナル（路線が多く初回表示のインパクト重視）
 - バス停選択はクイックアクセス＋お気に入りのみ（一覧表示なし、検索で絞り込み）
 - バックエンドにSupabase利用可能
+
+## コーディング規約
+- 日本語コメント推奨（ユーザーが日本語話者）
+- console.warnでAPI失敗を記録（catchで握りつぶさない）
+- ETAは「定刻＋遅延」で計算。始発停（OrderNo ≤ 2）の遅延データは信頼しない。
+- 未出発バスは定刻過ぎでも消さない（遅延表示して残す）
+
+## UI方針
+- 誤解を招く表現は避ける（例: 「最速」は到着順を保証できないため使わない）
+- Googleマップ連携: バス停名で検索リンク（座標ではなく名前ベース）
+- 走行中バスを上、未出発を下にグループ表示
 
 ## 主要バス停（クイックアクセス）
 那覇バスターミナル / 国際通り入口 / アメリカンビレッジ / 県庁北口 / イオンモール沖縄ライカム / 普天間 / 具志川バスターミナル / おもろまち駅前
@@ -34,6 +57,18 @@
 - Google Play公開前にモバイルクリエイト社にデータ利用許諾を取る
 - 公益性を重視、筋を通してから拡大
 
-## コミュニケーション
+## 既知の課題
+- 読谷バスターミナルが検索に出ない（API側の駅名を要確認）
+- 上り/下りバス停の区別が未実装
+- バス停キャッシュがない初回は全路線スキャンに時間がかかる
+
+## コミュニケーション方針
+- やり取りで得た方針・学びはこのCLAUDE.mdに自動追記する（PC間共有のため）
 - 技術用語（PR、Git等）は使わず日本語で結果だけ伝える
 - 簡潔に、余計な説明はしない
+
+## Git運用
+- ブランチ: `claude/intelligent-mirzakhani`
+- Cloudflare Pagesで自動デプロイ
+- PR: https://github.com/kentaro-source/okinawa-bus-tracker/pull/1
+- Git設定: kentaro-source / kentaro@kawagoe-sangyoui.com
