@@ -154,16 +154,17 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
 
         return allStations.filter(s => {
           const name = s.name;
-          const fullName = s.fullName;
-          if (name.includes(query) || fullName.includes(query)) return true;
-          if (name.includes(katakanaQuery) || fullName.includes(katakanaQuery)) return true;
-          if (name.includes(hiraganaQuery) || fullName.includes(hiraganaQuery)) return true;
-          if (aliasQuery && (name.includes(aliasQuery) || fullName.includes(aliasQuery))) return true;
+          // バス停名本体のみで検索（fullNameの括弧内方向表記は除外）
+          if (name.includes(query)) return true;
+          if (name.includes(katakanaQuery)) return true;
+          if (name.includes(hiraganaQuery)) return true;
+          if (aliasQuery && name.includes(aliasQuery)) return true;
           return false;
         }).sort((a, b) => {
+          const q = aliasQuery || query;
           // クエリとの前方一致を優先
-          const aStarts = a.name.startsWith(query) || a.name.startsWith(katakanaQuery) || (aliasQuery && a.name.startsWith(aliasQuery));
-          const bStarts = b.name.startsWith(query) || b.name.startsWith(katakanaQuery) || (aliasQuery && b.name.startsWith(aliasQuery));
+          const aStarts = a.name.startsWith(q) || a.name.startsWith(katakanaQuery);
+          const bStarts = b.name.startsWith(q) || b.name.startsWith(katakanaQuery);
           if (aStarts !== bStarts) return aStarts ? -1 : 1;
           // バスターミナル・駅を優先
           const aHub = /ターミナル|駅前|空港/.test(a.name);
