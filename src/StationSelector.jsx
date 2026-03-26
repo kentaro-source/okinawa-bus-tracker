@@ -155,15 +155,22 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
         return allStations.filter(s => {
           const name = s.name;
           const fullName = s.fullName;
-          // 元のクエリで一致
           if (name.includes(query) || fullName.includes(query)) return true;
-          // カタカナ変換で一致（ひらがな入力→カタカナバス停名）
           if (name.includes(katakanaQuery) || fullName.includes(katakanaQuery)) return true;
-          // ひらがな変換で一致（カタカナ入力→ひらがなバス停名）
           if (name.includes(hiraganaQuery) || fullName.includes(hiraganaQuery)) return true;
-          // よみがなエイリアスで一致
           if (aliasQuery && (name.includes(aliasQuery) || fullName.includes(aliasQuery))) return true;
           return false;
+        }).sort((a, b) => {
+          // クエリとの前方一致を優先
+          const aStarts = a.name.startsWith(query) || a.name.startsWith(katakanaQuery) || (aliasQuery && a.name.startsWith(aliasQuery));
+          const bStarts = b.name.startsWith(query) || b.name.startsWith(katakanaQuery) || (aliasQuery && b.name.startsWith(aliasQuery));
+          if (aStarts !== bStarts) return aStarts ? -1 : 1;
+          // バスターミナル・駅を優先
+          const aHub = /ターミナル|駅前|空港/.test(a.name);
+          const bHub = /ターミナル|駅前|空港/.test(b.name);
+          if (aHub !== bHub) return aHub ? -1 : 1;
+          // 路線数が多い＝主要バス停
+          return b.routes.length - a.routes.length;
         });
       })()
     : allStations;
