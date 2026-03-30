@@ -6,6 +6,8 @@ import './App.css'
 
 const REFRESH_INTERVAL = 45000;
 const FAVORITES_KEY = 'bus-tracker-favorites';
+const ROUTE_FAVORITES_KEY = 'bus-tracker-route-favorites';
+const MAX_ROUTE_FAVORITES = 5;
 const LAST_STATION_KEY = 'bus-tracker-last-station';
 const LAST_DEST_KEY = 'bus-tracker-last-dest';
 const DEFAULT_DEST = '那覇空港';
@@ -30,9 +32,21 @@ function saveFavorites(favs) {
   localStorage.setItem(FAVORITES_KEY, JSON.stringify(favs));
 }
 
+function loadRouteFavorites() {
+  try {
+    return JSON.parse(localStorage.getItem(ROUTE_FAVORITES_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRouteFavorites(routes) {
+  localStorage.setItem(ROUTE_FAVORITES_KEY, JSON.stringify(routes));
+}
+
 function App() {
   const [station, setStation] = useState(() =>
-    toInternalName(localStorage.getItem(LAST_STATION_KEY) || AIRPORT_REAL_NAME)
+    toInternalName(localStorage.getItem(LAST_STATION_KEY) || '那覇バスターミナル')
   );
   const [destination, setDestination] = useState(() =>
     localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル'
@@ -43,6 +57,7 @@ function App() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [selectorMode, setSelectorMode] = useState(null); // null | 'from' | 'to'
   const [favorites, setFavorites] = useState(loadFavorites);
+  const [routeFavorites, setRouteFavorites] = useState(loadRouteFavorites);
   const intervalRef = useRef(null);
 
   const isAirport = destination === DEFAULT_DEST;
@@ -74,7 +89,7 @@ function App() {
     setSelectorMode(null);
     setLoading(true);
     setBuses([]);
-    fetchBuses(newStation, destination);
+    fetchBuses(internal, destination);
   }, [fetchBuses, destination]);
 
   const changeDestination = useCallback((newDest) => {
@@ -99,6 +114,33 @@ function App() {
       return next;
     });
   }, []);
+
+  const isRouteFavorite = routeFavorites.some(r => r.from === station && r.to === destination);
+
+  const toggleRouteFavorite = useCallback(() => {
+    setRouteFavorites(prev => {
+      const exists = prev.findIndex(r => r.from === station && r.to === destination);
+      let next;
+      if (exists >= 0) {
+        next = prev.filter((_, i) => i !== exists);
+      } else {
+        next = [...prev, { from: station, to: destination }].slice(-MAX_ROUTE_FAVORITES);
+      }
+      saveRouteFavorites(next);
+      return next;
+    });
+  }, [station, destination]);
+
+  const switchToRoute = useCallback((from, to) => {
+    const internalFrom = toInternalName(from);
+    setStation(internalFrom);
+    setDestination(to);
+    localStorage.setItem(LAST_STATION_KEY, internalFrom);
+    localStorage.setItem(LAST_DEST_KEY, to);
+    setLoading(true);
+    setBuses([]);
+    fetchBuses(internalFrom, to);
+  }, [fetchBuses]);
 
   useEffect(() => {
     fetchBuses(station, destination);
@@ -142,6 +184,13 @@ function App() {
           >
             {isFavorite ? '★' : '☆'}
           </button>
+          <button
+            className={`btn-fav-route ${isRouteFavorite ? 'is-fav' : ''}`}
+            onClick={toggleRouteFavorite}
+            title={isRouteFavorite ? 'ルート解除' : 'ルート登録'}
+          >
+            {isRouteFavorite ? '🔖' : '📌'}
+          </button>
         </div>
         {lastUpdate && (
           <div className="header-update">
@@ -171,6 +220,19 @@ function App() {
 
       <footer className="footer">
         <div className="footer-actions">
+          {routeFavorites.length > 0 && (
+            <div className="route-fav-list">
+              {routeFavorites.map((r, i) => (
+                <button
+                  key={`${r.from}-${r.to}-${i}`}
+                  className={`btn-route-fav ${r.from === station && r.to === destination ? 'active' : ''}`}
+                  onClick={() => switchToRoute(r.from, r.to)}
+                >
+                  🔖 {r.from}→{r.to}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="fav-list">
             {favorites.map(fav => (
               <button
