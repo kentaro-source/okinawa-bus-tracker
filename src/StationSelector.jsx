@@ -123,6 +123,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 stationSet.set(cleanName, {
                   name: cleanName,
                   fullName: s.Name,
+                  yomigana: s.Yomigana || '',
                   lat: s.Position?.Latitude || null,
                   lng: s.Position?.Longitude || null,
                   routes: [route.short],
@@ -135,6 +136,9 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 if (!existing.lat && s.Position?.Latitude) {
                   existing.lat = s.Position.Latitude;
                   existing.lng = s.Position.Longitude;
+                }
+                if (!existing.yomigana && s.Yomigana) {
+                  existing.yomigana = s.Yomigana;
                 }
               }
             }
@@ -212,6 +216,8 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           if (name.includes(query)) return true;
           if (name.includes(katakanaQuery)) return true;
           if (name.includes(hiraganaQuery)) return true;
+          // よみがな検索（ひらがな入力→カタカナよみがなにマッチ）
+          if (s.yomigana && s.yomigana.includes(katakanaQuery)) return true;
           if (aliasQuery && aliasQuery.some(a => name.includes(a))) return true;
           return false;
         }).sort((a, b) => {

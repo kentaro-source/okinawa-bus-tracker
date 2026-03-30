@@ -169,6 +169,13 @@ function App() {
             <span className="header-from">{toDisplayName(station)}</span>
           </button>
           <a className="btn-map-icon" href={googleMapsUrl(toDisplayName(station))} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
+          <button
+            className={`btn-fav ${isFavorite ? 'is-fav' : ''}`}
+            onClick={() => toggleFavorite(station)}
+            title={isFavorite ? 'お気に入り解除' : 'お気に入り登録'}
+          >
+            {isFavorite ? '★' : '☆'}
+          </button>
           <button className="header-swap-btn" onClick={() => {
             const newFrom = destination;
             const newTo = station;
@@ -183,13 +190,6 @@ function App() {
             <span className={`header-to ${isAirport ? '' : 'custom-dest'}`}>{toDisplayName(destination)}</span>
           </button>
           <a className="btn-map-icon" href={googleMapsUrl(toDisplayName(destination))} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
-          <button
-            className={`btn-fav ${isFavorite ? 'is-fav' : ''}`}
-            onClick={() => toggleFavorite(station)}
-            title={isFavorite ? 'お気に入り解除' : 'お気に入り登録'}
-          >
-            {isFavorite ? '★' : '☆'}
-          </button>
           <button
             className={`btn-fav-route ${isRouteFavorite ? 'is-fav' : ''}`}
             onClick={toggleRouteFavorite}
