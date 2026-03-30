@@ -9,7 +9,6 @@ export const AIRPORT_ROUTE_NUMBERS = new Set([
 const STATION_ALIASES = {
   '那覇空港': ['旅客ターミナル前'],
   '那覇バスターミナル': ['旭橋'],
-  '旭橋': ['那覇バスターミナル'],
 };
 
 // 経由地として表示する主要バス停（ユーザーが判断しやすい目印）
