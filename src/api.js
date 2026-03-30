@@ -381,7 +381,8 @@ export async function getAllBuses(stationName) {
 // Get buses between any two stations, pre-filtered by station cache
 export async function getBusesBetween(fromStation, toStation) {
   // If either station involves the airport, limit to airport routes for accuracy
-  const isAirportInvolved = fromStation.includes('那覇空港') || toStation.includes('那覇空港');
+  const isAirportInvolved = fromStation.includes('那覇空港') || toStation.includes('那覇空港')
+    || fromStation.includes('旅客ターミナル前') || toStation.includes('旅客ターミナル前');
 
   if (isAirportInvolved) {
     const routes = await getAirportRoutes();

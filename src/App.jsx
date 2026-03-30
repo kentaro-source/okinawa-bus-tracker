@@ -9,6 +9,16 @@ const FAVORITES_KEY = 'bus-tracker-favorites';
 const LAST_STATION_KEY = 'bus-tracker-last-station';
 const LAST_DEST_KEY = 'bus-tracker-last-dest';
 const DEFAULT_DEST = '那覇空港';
+const AIRPORT_REAL_NAME = '国内線旅客ターミナル前';
+// 表示名→内部名の変換（APIに存在しないバス停名を実名に変換）
+const DISPLAY_TO_INTERNAL = {
+  '那覇空港': AIRPORT_REAL_NAME,
+};
+const INTERNAL_TO_DISPLAY = {
+  [AIRPORT_REAL_NAME]: '那覇空港',
+};
+function toInternalName(name) { return DISPLAY_TO_INTERNAL[name] || name; }
+function toDisplayName(name) { return INTERNAL_TO_DISPLAY[name] || name; }
 function googleMapsUrl(stationName) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
 }
@@ -27,7 +37,7 @@ function saveFavorites(favs) {
 
 function App() {
   const [station, setStation] = useState(() =>
-    localStorage.getItem(LAST_STATION_KEY) || '那覇空港'
+    toInternalName(localStorage.getItem(LAST_STATION_KEY) || AIRPORT_REAL_NAME)
   );
   const [destination, setDestination] = useState(() =>
     localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル'
@@ -63,8 +73,9 @@ function App() {
   }, []);
 
   const changeStation = useCallback((newStation) => {
-    setStation(newStation);
-    localStorage.setItem(LAST_STATION_KEY, newStation);
+    const internal = toInternalName(newStation);
+    setStation(internal);
+    localStorage.setItem(LAST_STATION_KEY, internal);
     setSelectorMode(null);
     setLoading(true);
     setBuses([]);
@@ -112,7 +123,7 @@ function App() {
       <header className="header">
         <div className="header-route">
           <button className="header-station-btn" onClick={() => setSelectorMode('from')}>
-            <span className="header-from">{station}</span>
+            <span className="header-from">{toDisplayName(station)}</span>
           </button>
           <a className="btn-map-icon" href={googleMapsUrl(station)} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
           <button className="header-swap-btn" onClick={() => {
