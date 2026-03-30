@@ -623,16 +623,20 @@ async function getApproachBuses(stationName, destinationName) {
     const buses = result?.buses || [];
     const stationSid = result?.stationSid || null;
 
-    // 接近情報がある場合はそれを使用
-    if (buses.length > 0) {
-      return formatApproachBuses(buses, destinationName);
-    }
+    // 接近情報があればフォーマット
+    const formatted = buses.length > 0 ? formatApproachBuses(buses, destinationName) : [];
 
-    // 接近情報が空（始発停など）→ 時刻表フォールバック
+    // 時刻表も常に取得してマージ（接近情報は目的地フィルタで減るため）
     if (stationSid) {
       const busStopCode = stationCode + '0000';
-      return getTimetableBuses(stationSid, busStopCode, destinationName);
+      const timetable = await getTimetableBuses(stationSid, busStopCode, destinationName);
+      // 重複排除: 同じ路線番号＋定刻は接近情報側を優先
+      const approachKeys = new Set(formatted.map(b => `${b.routeShort}-${b.scheduledTime}`));
+      const uniqueTimetable = timetable.filter(b => !approachKeys.has(`${b.routeShort}-${b.scheduledTime}`));
+      return [...formatted, ...uniqueTimetable];
     }
+
+    return formatted;
 
     return [];
   } catch (e) {

@@ -209,7 +209,7 @@ export async function onRequest(context) {
     let parsed;
     try { parsed = JSON.parse(html); } catch { parsed = html; }
 
-    const allRoutes = parseTimetableHtml(parsed);
+const allRoutes = parseTimetableHtml(parsed);
     const dayType = getDayType();
 
     // 現在時刻以降の出発のみ、今日の曜日種別でフィルタ
