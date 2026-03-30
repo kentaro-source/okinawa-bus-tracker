@@ -633,23 +633,10 @@ async function getApproachBuses(stationName, destinationName) {
   }
 }
 
-// 接近情報をBusList形式に変換
+// 接近情報をBusList形式に変換（フィルタはgetBusesBetween側で実施）
 function formatApproachBuses(buses, destinationName) {
-  // 接近情報は終点しか持たないため、駅キャッシュで路線が目的地を通るか確認
-  let destRoutes = null;
-  if (destinationName) {
-    destRoutes = getCachedRoutesForStation(destinationName);
-  }
-
   return buses
-    .filter(b => {
-      if (!destinationName) return true;
-      if (filterByDestination(b.destination, b.routeName, destinationName)) return true;
-      // 駅キャッシュで路線が目的地を通るか確認（キャッシュなければ全表示）
-      if (!destRoutes) return true;
-      if (destRoutes.includes(b.routeNumber)) return true;
-      return false;
-    })
+    .filter(b => filterByDestination(b.destination, b.routeName, destinationName))
     .map(b => {
       const timeParts = b.scheduledTime?.match(/^(\d+):(\d+)$/);
       const hour = timeParts ? parseInt(timeParts[1]) : null;
@@ -702,22 +689,9 @@ async function getTimetableBuses(stationSid, busStopCode, destinationName) {
     );
     if (!departures || !Array.isArray(departures)) return [];
 
-    // 目的地フィルタ: 時刻表は終点しか持たないため、駅キャッシュで路線が目的地を通るか確認
-    let destRoutes = null;
-    if (destinationName) {
-      destRoutes = getCachedRoutesForStation(destinationName);
-    }
-
+    // フィルタはgetBusesBetween側で実施。ここでは終点名のみチェック
     return departures
-      .filter(d => {
-        if (!destinationName) return true;
-        // まず終点名で直接マッチ（終点が目的地ならOK）
-        if (filterByDestination(d.destination, d.routeName, destinationName)) return true;
-        // 駅キャッシュで路線番号が目的地を通るか確認（キャッシュなければ全表示）
-        if (!destRoutes) return true;
-        if (destRoutes.includes(d.routeNumber)) return true;
-        return false;
-      })
+      .filter(d => filterByDestination(d.destination, d.routeName, destinationName))
       .slice(0, 10) // 直近10本まで
       .map(d => {
         const now = new Date();
@@ -787,16 +761,29 @@ export async function getBusesBetween(fromStation, toStation) {
     : allRoutes;
 
   // リアルタイムデータと接近情報を並列取得
+  // 接近情報は目的地フィルタなしで取得（getBusesBetween側でフィルタ）
   const [realtime, approach] = await Promise.all([
     fetchBusesForRoutes(routes, fromStation, toStation),
-    getApproachBuses(fromStation, toStation),
+    getApproachBuses(fromStation, null),
   ]);
+
+  // 接近情報を目的地でフィルタ: 駅キャッシュ＋終点名の両方で判定
+  const destRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
+  const filteredApproach = toStation
+    ? approach.filter(b => {
+        // 終点名が目的地と一致
+        if (filterByDestination(b.destination, b.routeName, toStation)) return true;
+        // 駅キャッシュでこの路線が目的地を通るか確認
+        if (destRoutes && destRoutes.includes(b.routeShort)) return true;
+        return false;
+      })
+    : approach;
 
   // 重複排除: 同じ路線番号＋定刻のバスはリアルタイム側を優先
   const realtimeKeys = new Set(realtime.map(b =>
     `${b.routeShort}-${String(b.scheduledHour).padStart(2,'0')}:${String(b.scheduledMinute).padStart(2,'0')}`
   ));
-  const uniqueApproach = approach.filter(b => !realtimeKeys.has(`${b.routeShort}-${b.scheduledTime}`));
+  const uniqueApproach = filteredApproach.filter(b => !realtimeKeys.has(`${b.routeShort}-${b.scheduledTime}`));
 
   const merged = [...realtime, ...uniqueApproach];
 
