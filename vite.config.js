@@ -31,6 +31,40 @@ export default defineConfig({
   plugins: [react(), routeListPlugin()],
   server: {
     proxy: {
+      '/api/Approach': {
+        target: 'https://www.busnavi-okinawa.com',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => {
+          const url = new URL('http://dummy' + path);
+          const stationCode = url.searchParams.get('stationCode');
+          return '/top/Approach/Result';
+        },
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/json',
+        },
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            const url = new URL('http://dummy' + req.url);
+            const stationCode = url.searchParams.get('stationCode');
+            const body = JSON.stringify({ selectLang: 'ja', startStaCode: stationCode, goalStaCode: '', listSortMode: 0 });
+            proxyReq.method = 'POST';
+            proxyReq.setHeader('Content-Type', 'application/json');
+            proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
+            proxyReq.write(body);
+          });
+        },
+      },
+      '/api/StationCorrection': {
+        target: 'https://www.busnavi-okinawa.com',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace('/api/StationCorrection', '/top/Approach/StationCorrection'),
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      },
       '/api': {
         target: 'https://www.busnavi-okinawa.com',
         changeOrigin: true,

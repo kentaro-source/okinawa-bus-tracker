@@ -548,6 +548,105 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
     });
 }
 
+// StationCodeキャッシュ（セッション中有効）
+const stationCodeCache = new Map();
+
+// バス停名からStationCodeを取得
+async function getStationCode(stationName) {
+  if (stationCodeCache.has(stationName)) return stationCodeCache.get(stationName);
+
+  // エイリアス解決
+  const queryName = stationName;
+  const aliases = STATION_ALIASES[stationName];
+  const names = aliases ? [stationName, ...aliases] : [stationName];
+
+  for (const name of names) {
+    try {
+      const data = await fetchJSON(`${BASE}/StationCorrection?stationName=${encodeURIComponent(name)}`);
+      if (data && data.length > 0) {
+        const code = data[0].StationCode;
+        stationCodeCache.set(stationName, code);
+        return code;
+      }
+    } catch {}
+  }
+  return null;
+}
+
+// 接近情報を取得してBusList互換の形式に変換
+async function getApproachBuses(stationName, destinationName) {
+  const stationCode = await getStationCode(stationName);
+  if (!stationCode) return [];
+
+  try {
+    const buses = await fetchJSON(`${BASE}/Approach?stationCode=${stationCode}`);
+    if (!buses || !Array.isArray(buses)) return [];
+
+    return buses
+      .filter(b => {
+        // 目的地フィルタ: 終点名or路線名に目的地が含まれるか
+        if (!destinationName) return true;
+        const dest = b.destination || '';
+        const route = b.routeName || '';
+        if (matchStation(destinationName, dest)) return true;
+        if (matchStation(destinationName, route)) return true;
+        // 那覇空港エイリアス
+        const aliases = STATION_ALIASES[destinationName];
+        if (aliases) {
+          return aliases.some(a => dest.includes(a) || route.includes(a));
+        }
+        return false;
+      })
+      .map(b => {
+        // 定刻パース
+        const timeParts = b.scheduledTime?.match(/^(\d+):(\d+)$/);
+        const hour = timeParts ? parseInt(timeParts[1]) : null;
+        const minute = timeParts ? parseInt(timeParts[2]) : null;
+
+        // ETA計算
+        let etaMinutes = null;
+        if (b.arrivalTime) {
+          const arrParts = b.arrivalTime.match(/^(\d+):(\d+)$/);
+          if (arrParts) {
+            const now = new Date();
+            const arrDate = new Date();
+            arrDate.setHours(parseInt(arrParts[1]), parseInt(arrParts[2]), 0, 0);
+            etaMinutes = Math.max(1, Math.round((arrDate - now) / 60000));
+          }
+        } else if (b.isApproaching) {
+          etaMinutes = 1;
+        }
+
+        return {
+          routeKey: b.routeNumber,
+          routeName: `${b.routeNumber}番 ${b.routeName.replace(/^.*?線/, '線').replace(/（共同運行）/, '')}`,
+          routeShort: b.routeNumber,
+          direction: '',
+          busId: `approach-${b.routeNumber}-${b.scheduledTime}`,
+          company: '',
+          position: null,
+          gpsTime: null,
+          scheduledTime: b.scheduledTime,
+          scheduledHour: hour,
+          scheduledMinute: minute,
+          etaMinutes,
+          delayMinutes: 0,
+          passed: false,
+          notDeparted: false,
+          destination: b.destination.replace(/（終点）|（起点）/g, ''),
+          speed: null,
+          currentStop: b.currentStop || null,
+          stopsAway: b.stopsAway,
+          viaStops: [],
+          isApproach: true, // 接近情報由来フラグ
+        };
+      });
+  } catch (e) {
+    console.warn('Approach API failed:', e);
+    return [];
+  }
+}
+
 // Get airport-bound buses from a station (default behavior)
 export async function getAllBuses(stationName) {
   const airportRoutes = await getAirportRoutes();
@@ -555,6 +654,7 @@ export async function getAllBuses(stationName) {
 }
 
 // Get buses between any two stations, pre-filtered by station cache
+// BusLocation（リアルタイム）とApproach（接近情報）を並列取得してマージ
 export async function getBusesBetween(fromStation, toStation) {
   const allRoutes = await fetchAllRoutes();
 
@@ -564,7 +664,32 @@ export async function getBusesBetween(fromStation, toStation) {
     ? allRoutes.filter(r => knownRoutes.includes(r.short))
     : allRoutes;
 
-  return fetchBusesForRoutes(routes, fromStation, toStation);
+  // リアルタイムデータと接近情報を並列取得
+  const [realtime, approach] = await Promise.all([
+    fetchBusesForRoutes(routes, fromStation, toStation),
+    getApproachBuses(fromStation, toStation),
+  ]);
+
+  // 重複排除: 同じ路線番号＋定刻のバスはリアルタイム側を優先
+  const realtimeKeys = new Set(realtime.map(b =>
+    `${b.routeShort}-${String(b.scheduledHour).padStart(2,'0')}:${String(b.scheduledMinute).padStart(2,'0')}`
+  ));
+  const uniqueApproach = approach.filter(b => !realtimeKeys.has(`${b.routeShort}-${b.scheduledTime}`));
+
+  const merged = [...realtime, ...uniqueApproach];
+
+  return merged
+    .filter(r => {
+      if (r.etaMinutes !== null && r.etaMinutes <= 0) return false;
+      if (r.notDeparted && r.etaMinutes !== null && r.etaMinutes > 60) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
+      if (a.etaMinutes === null) return 1;
+      if (b.etaMinutes === null) return -1;
+      return a.etaMinutes - b.etaMinutes;
+    });
 }
 
 // Backwards compatible alias
