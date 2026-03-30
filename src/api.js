@@ -153,21 +153,30 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         if (passedDest) continue;
       }
 
+      // AllStationsからOrderNoを逆引きするヘルパー
+      const getOrderFromAllStations = (name) => {
+        const match = allStations.find(s => matchStation(name, s.Name));
+        return match?.OrderNo ?? null;
+      };
+
       // AllStationsから出発地のOrderNoを取得
-      const allStationMatch = allStations.find(s => matchStation(stationName, s.Name));
-      const ourOrderNo = allStationMatch?.OrderNo ?? null;
+      const ourOrderNo = getOrderFromAllStations(stationName);
 
       // 現在位置・stopsAway計算
       const lastPassage = passages[passages.length - 1];
       const currentStop = lastPassage.Station.ShortName || getBaseName(lastPassage.Station.Name);
-      const lastPassageOrder = lastPassage.Schedule?.OrderNo;
+      // PassageのSchedule.OrderNoがなければAllStationsから補完
+      let lastPassageOrder = lastPassage.Schedule?.OrderNo;
+      if (lastPassageOrder == null) {
+        lastPassageOrder = getOrderFromAllStations(lastPassage.Station.Name);
+      }
       let stopsAway = null;
       if (ourOrderNo != null && lastPassageOrder != null) {
         stopsAway = ourOrderNo - lastPassageOrder;
         if (stopsAway < 0) continue; // 既に通過
       }
 
-      // Passagesのスケジュールデータから定刻・ETA・遅延を推定
+      // Passagesのデータから定刻・ETA・遅延を推定
       let etaMinutes = null;
       let delayMinutes = 0;
       let scheduledTime = null;
@@ -176,34 +185,43 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
       const lastArrival = parseNetDate(lastPassage.ArrivalTime);
       const isNearOrigin = lastPassageOrder != null && lastPassageOrder <= 2;
 
-      if (passages.length >= 2) {
+      if (passages.length >= 2 && stopsAway != null) {
         const firstPassage = passages[0];
         const firstArrival = parseNetDate(firstPassage.ArrivalTime);
-        const firstOrder = firstPassage.Schedule?.OrderNo;
-        const firstSched = firstPassage.Schedule?.ScheduledTime;
-        const lastSched = lastPassage.Schedule?.ScheduledTime;
+        // PassageのSchedule.OrderNoがなければAllStationsから補完
+        let firstOrder = firstPassage.Schedule?.OrderNo;
+        if (firstOrder == null) {
+          firstOrder = getOrderFromAllStations(firstPassage.Station.Name);
+        }
 
         if (firstOrder != null && lastPassageOrder != null && lastPassageOrder > firstOrder) {
           const stopCount = lastPassageOrder - firstOrder;
 
-          if (stopsAway != null) {
-            // 定刻推定: スケジュール上の1停あたり時間 × 残り停留所
-            if (firstSched && lastSched) {
-              const schedFirst = firstSched.Hour * 60 + firstSched.Minute;
-              const schedLast = lastSched.Hour * 60 + lastSched.Minute;
-              const schedPerStop = (schedLast - schedFirst) / stopCount;
-              const estMinutes = schedLast + Math.round(schedPerStop * stopsAway);
-              scheduledHour = Math.floor(estMinutes / 60) % 24;
-              scheduledMinute = estMinutes % 60;
-              scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
-            }
+          // ETA推定: 実績ベースの1停あたり時間
+          if (firstArrival && lastArrival) {
+            const actualPerStop = (lastArrival - firstArrival) / 60000 / stopCount;
+            const elapsed = (new Date() - lastArrival) / 60000;
+            etaMinutes = Math.max(1, Math.round(actualPerStop * stopsAway - elapsed));
+          }
 
-            // ETA推定: 実績ベースの1停あたり時間
-            if (firstArrival && lastArrival) {
-              const actualPerStop = (lastArrival - firstArrival) / 60000 / stopCount;
-              const elapsed = (new Date() - lastArrival) / 60000;
-              etaMinutes = Math.max(1, Math.round(actualPerStop * stopsAway - elapsed));
-            }
+          // 定刻推定: PassageにScheduledTimeがあればそれを使用、なければ実績ベース
+          const firstSched = firstPassage.Schedule?.ScheduledTime;
+          const lastSched = lastPassage.Schedule?.ScheduledTime;
+          if (firstSched && lastSched) {
+            const schedFirst = firstSched.Hour * 60 + firstSched.Minute;
+            const schedLast = lastSched.Hour * 60 + lastSched.Minute;
+            const schedPerStop = (schedLast - schedFirst) / stopCount;
+            const estMinutes = schedLast + Math.round(schedPerStop * stopsAway);
+            scheduledHour = Math.floor(estMinutes / 60) % 24;
+            scheduledMinute = estMinutes % 60;
+            scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
+          } else if (firstArrival && lastArrival) {
+            // ScheduledTimeなし → 実績から定刻を推定
+            const actualPerStop = (lastArrival - firstArrival) / 60000 / stopCount;
+            const estArrival = new Date(lastArrival.getTime() + actualPerStop * stopsAway * 60000);
+            scheduledHour = estArrival.getHours();
+            scheduledMinute = estArrival.getMinutes();
+            scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
           }
 
           // 遅延推定
