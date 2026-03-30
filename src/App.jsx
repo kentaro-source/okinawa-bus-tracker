@@ -9,16 +9,11 @@ const FAVORITES_KEY = 'bus-tracker-favorites';
 const LAST_STATION_KEY = 'bus-tracker-last-station';
 const LAST_DEST_KEY = 'bus-tracker-last-dest';
 const DEFAULT_DEST = '那覇空港';
-const AIRPORT_REAL_NAME = '国内線旅客ターミナル前';
 // 表示名→内部名の変換（APIに存在しないバス停名を実名に変換）
-const DISPLAY_TO_INTERNAL = {
-  '那覇空港': AIRPORT_REAL_NAME,
-};
-const INTERNAL_TO_DISPLAY = {
-  [AIRPORT_REAL_NAME]: '那覇空港',
-};
-function toInternalName(name) { return DISPLAY_TO_INTERNAL[name] || name; }
-function toDisplayName(name) { return INTERNAL_TO_DISPLAY[name] || name; }
+function toInternalName(name) {
+  if (name === '那覇空港') return '旅客ターミナル前';
+  return name;
+}
 function googleMapsUrl(stationName) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
 }
