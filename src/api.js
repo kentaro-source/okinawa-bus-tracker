@@ -364,7 +364,7 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
 
     // Destination from the group or last station in schedule
     const lastStation = schedules[schedules.length - 1];
-    const destination = group.YukisakiName || lastStation?.Station?.ShortName || '';
+    const destination = getBaseName(lastStation?.Station?.Name) || group.YukisakiName || '';
 
     // Current position info: last passed stop and stops remaining
     let currentStop = null;
