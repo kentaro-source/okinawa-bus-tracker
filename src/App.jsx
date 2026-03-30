@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getAllBuses, getBusesBetween } from './api'
+import { getBusesBetween } from './api'
 import BusList from './BusList'
 import StationSelector from './StationSelector'
 import './App.css'
@@ -10,7 +10,7 @@ const ROUTE_FAVORITES_KEY = 'bus-tracker-route-favorites';
 const MAX_ROUTE_FAVORITES = 5;
 const LAST_STATION_KEY = 'bus-tracker-last-station';
 const LAST_DEST_KEY = 'bus-tracker-last-dest';
-const DEFAULT_DEST = '那覇空港';
+// 那覇空港は内部的に '旅客ターミナル前' で処理（国内線/国際線両方にマッチ）
 // 表示名→内部名の変換（APIに存在しないバス停名を実名に変換）
 function toInternalName(name) {
   if (name === '那覇空港') return '旅客ターミナル前';
@@ -65,8 +65,6 @@ function App() {
   const [routeFavorites, setRouteFavorites] = useState(loadRouteFavorites);
   const intervalRef = useRef(null);
 
-  const isAirport = destination === DEFAULT_DEST;
-
   const fetchBuses = useCallback(async (from, to) => {
     try {
       setError(null);
@@ -75,9 +73,7 @@ function App() {
         setLastUpdate(new Date());
         return;
       }
-      const data = to === DEFAULT_DEST
-        ? await getAllBuses(from)
-        : await getBusesBetween(from, to);
+      const data = await getBusesBetween(from, to);
       setBuses(data);
       setLastUpdate(new Date());
     } catch (e) {
@@ -108,7 +104,7 @@ function App() {
   }, [fetchBuses, station]);
 
   const resetToAirport = useCallback(() => {
-    changeDestination(DEFAULT_DEST);
+    changeDestination('那覇空港');
   }, [changeDestination]);
 
   const toggleFavorite = useCallback((stationName) => {
@@ -156,10 +152,7 @@ function App() {
 
   const isFavorite = favorites.includes(station);
 
-  // For airport mode, keep direction filter; for custom dest, show all results
-  const filteredBuses = isAirport
-    ? buses.filter(b => b.direction === 'up')
-    : buses;
+  const filteredBuses = buses;
 
   return (
     <div className="app">
@@ -187,7 +180,7 @@ function App() {
             <span className="header-arrow">→</span>
           </button>
           <button className="header-station-btn" onClick={() => setSelectorMode('to')}>
-            <span className={`header-to ${isAirport ? '' : 'custom-dest'}`}>{toDisplayName(destination)}</span>
+            <span className="header-to custom-dest">{toDisplayName(destination)}</span>
           </button>
           <a className="btn-map-icon" href={googleMapsUrl(toDisplayName(destination))} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
           <button
