@@ -622,8 +622,19 @@ async function getApproachBuses(stationName, destinationName) {
 
 // 接近情報をBusList形式に変換
 function formatApproachBuses(buses, destinationName) {
+  // 接近情報は終点しか持たないため、駅キャッシュで路線が目的地を通るか確認
+  let destRoutes = null;
+  if (destinationName) {
+    destRoutes = getCachedRoutesForStation(destinationName);
+  }
+
   return buses
-    .filter(b => filterByDestination(b.destination, b.routeName, destinationName))
+    .filter(b => {
+      if (!destinationName) return true;
+      if (filterByDestination(b.destination, b.routeName, destinationName)) return true;
+      if (destRoutes && destRoutes.includes(b.routeNumber)) return true;
+      return false;
+    })
     .map(b => {
       const timeParts = b.scheduledTime?.match(/^(\d+):(\d+)$/);
       const hour = timeParts ? parseInt(timeParts[1]) : null;
