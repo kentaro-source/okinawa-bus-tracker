@@ -12,9 +12,11 @@ const STATION_ALIASES = {
 
 // 経由地として表示する主要バス停（ユーザーが判断しやすい目印）
 const VIA_LANDMARKS = [
-  '久茂地', '牧志', '県庁北口', '県庁前', '泊高橋', '国際通り入口',
+  '那覇バスターミナル', '旭橋', '久茂地', '牧志', '県庁北口', '県庁前',
+  '泊高橋', '国際通り入口', '旅客ターミナル',
   '普天間', '宜野湾', '北谷', 'コンベンションセンター前',
   '沖縄南ＩＣ', '沖縄北ＩＣ', '西原ＩＣ',
+  'ライカム', '読谷', '嘉手納',
 ];
 
 // 括弧内の方向表記を除外してバス停名の本体だけ取得
@@ -127,7 +129,7 @@ function isRunningToday(youbiKbn) {
 }
 
 // Process buses from a single group (上り or 下り)
-function processBuses(buses, stationName, route, group, direction) {
+function processBuses(buses, stationName, route, group, direction, destinationName) {
   const results = [];
 
   for (const bus of buses) {
@@ -138,6 +140,13 @@ function processBuses(buses, stationName, route, group, direction) {
 
     const schedules = bus.Daiya.PassedSchedules || [];
     const passages = bus.Passages || [];
+
+    // 目的地が指定されている場合、この便のスケジュールに目的地があるか確認
+    // （AllStationsでは通るが、個別便では通らないケースを除外）
+    if (destinationName) {
+      const destInSchedule = schedules.some(s => matchStation(destinationName, s.Station.Name));
+      if (!destInSchedule) continue;
+    }
 
     // Find when bus is scheduled at our station (using base name matching + aliases)
     const stationSchedule = schedules.find(s => matchStation(stationName, s.Station.Name));
@@ -372,7 +381,7 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 
         // Only fetch bus locations after confirming route serves both stations
         const buses = await getBusLocation(route.keitouSid, group.Sid);
-        const processed = processBuses(buses, stationName, route, group, direction);
+        const processed = processBuses(buses, stationName, route, group, direction, destinationName);
         results.push(...processed);
       }
     } catch (e) {
