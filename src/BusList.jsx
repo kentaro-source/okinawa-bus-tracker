@@ -63,7 +63,11 @@ function BusCard({ bus }) {
             </span>
           )}
         </div>
-        {bus.notDeparted ? (
+        {bus.isTimetable ? (
+          <div className="bus-position not-departed">
+            🕐 {bus.scheduledTime}発（時刻表）
+          </div>
+        ) : bus.notDeparted ? (
           <div className="bus-position not-departed">
             🕐 {String(bus.scheduledHour).padStart(2,'0')}:{String(bus.scheduledMinute).padStart(2,'0')}発
             {bus.delayMinutes > 0 ? `（遅延${bus.delayMinutes}分）` : '（未出発）'}
@@ -93,8 +97,9 @@ function BusCard({ bus }) {
 export default function BusList({ buses }) {
   if (!buses || buses.length === 0) return null;
 
-  const running = buses.filter(b => !b.notDeparted);
-  const notDeparted = buses.filter(b => b.notDeparted);
+  const running = buses.filter(b => !b.notDeparted && !b.isTimetable);
+  const notDeparted = buses.filter(b => b.notDeparted && !b.isTimetable);
+  const timetable = buses.filter(b => b.isTimetable);
 
   return (
     <div className="bus-list">
@@ -111,6 +116,14 @@ export default function BusList({ buses }) {
           <div className="bus-group-header">🕐 まもなく出発</div>
           {notDeparted.map((bus) => (
             <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
+          ))}
+        </div>
+      )}
+      {timetable.length > 0 && (
+        <div className="bus-group">
+          <div className="bus-group-header">📋 時刻表</div>
+          {timetable.map((bus) => (
+            <BusCard key={`${bus.routeKey}-${bus.busId}`} bus={bus} />
           ))}
         </div>
       )}

@@ -44,6 +44,71 @@ function parseApproachHtml(html) {
   return buses;
 }
 
+// 時刻表HTMLをパースしてJSON化
+function parseTimetableHtml(html) {
+  const tables = [...html.matchAll(/<table[^>]*>([\s\S]*?)<\/table>/g)];
+  const routes = [];
+
+  for (const table of tables) {
+    const rows = [...table[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)];
+    if (rows.length < 3) continue;
+
+    // ヘッダ行から路線情報抽出
+    const headerCells = [...rows[0][1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)]
+      .map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+    const routeInfo = headerCells[headerCells.length - 1] || '';
+    const numMatch = routeInfo.match(/\[(\d+)\]/);
+    const routeNumber = numMatch ? numMatch[1] : '';
+    const destMatch = routeInfo.match(/（(.+?)行き）/);
+    const destination = destMatch ? destMatch[1] : '';
+    const companyMatch = routeInfo.match(/行き）\s*(.+)$/);
+    const company = companyMatch ? companyMatch[1].trim() : '';
+
+    // 平日/土曜/日祝ブロックのパース
+    const schedules = { weekday: [], saturday: [], holiday: [] };
+    let currentType = null;
+
+    for (let i = 2; i < rows.length; i++) {
+      const cells = [...rows[i][1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/g)]
+        .map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+
+      if (cells.length === 0) continue;
+
+      // 曜日ブロック切替
+      if (cells[0] === '平日') { currentType = 'weekday'; }
+      else if (cells[0] === '土曜') { currentType = 'saturday'; }
+      else if (cells[0] === '日祝') { currentType = 'holiday'; }
+
+      if (!currentType) continue;
+
+      // 時間行: [hour, minutes...]
+      const hourCell = cells[0] === '平日' || cells[0] === '土曜' || cells[0] === '日祝' ? cells[1] : cells[0];
+      const minuteCell = cells[0] === '平日' || cells[0] === '土曜' || cells[0] === '日祝' ? cells[2] : cells[1];
+      const hour = parseInt(hourCell);
+      if (isNaN(hour)) continue;
+
+      if (minuteCell) {
+        const minutes = minuteCell.split(/\s+/).map(m => m.replace(/[^\d]/g, '')).filter(m => m);
+        for (const min of minutes) {
+          schedules[currentType].push({ hour: hour % 24, minute: parseInt(min) });
+        }
+      }
+    }
+
+    routes.push({ routeNumber, routeName: routeInfo, destination, company, schedules });
+  }
+  return routes;
+}
+
+// 現在の曜日種別を判定
+function getDayType() {
+  const day = new Date().getDay();
+  if (day === 0) return 'holiday'; // 日曜
+  if (day === 6) return 'saturday';
+  return 'weekday';
+  // TODO: 祝日判定
+}
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const path = url.pathname.replace(/^\/api\//, '');
@@ -91,7 +156,12 @@ export async function onRequest(context) {
       parsed = html;
     }
     const buses = parseApproachHtml(parsed);
-    return new Response(JSON.stringify(buses), {
+
+    // stationSidを隠しフィールドから抽出（時刻表フォールバック用）
+    const sidMatch = parsed.match(/_hdnSelectStationSid[^>]*value="([^"]+)"/);
+    const stationSid = sidMatch ? sidMatch[1] : null;
+
+    return new Response(JSON.stringify({ buses, stationSid }), {
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
@@ -117,6 +187,62 @@ export async function onRequest(context) {
       headers: {
         'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
+      },
+    });
+  }
+
+  // 時刻表エンドポイント: stationSidとbusStopCodeで全路線の時刻表を取得
+  if (path === 'Timetable') {
+    const stationSid = url.searchParams.get('stationSid');
+    const busStopCode = url.searchParams.get('busStopCode');
+    if (!stationSid || !busStopCode) {
+      return new Response(JSON.stringify({ error: 'stationSid and busStopCode required' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+    const res = await fetch(
+      `https://www.busnavi-okinawa.com/top/ViewTimeTable/TimeTableAll?selectLang=ja&parentCompanyCode=9000&stationSid=${encodeURIComponent(stationSid)}&busStopCode=${encodeURIComponent(busStopCode)}&goalStationCode=`,
+      { headers: { 'X-Requested-With': 'XMLHttpRequest' } }
+    );
+    const html = await res.text();
+    let parsed;
+    try { parsed = JSON.parse(html); } catch { parsed = html; }
+
+    const allRoutes = parseTimetableHtml(parsed);
+    const dayType = getDayType();
+
+    // 現在時刻以降の出発のみ、今日の曜日種別でフィルタ
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const upcoming = [];
+
+    for (const route of allRoutes) {
+      const times = route.schedules[dayType] || [];
+      for (const t of times) {
+        const totalMin = t.hour * 60 + t.minute;
+        if (totalMin >= currentMinutes - 5) { // 5分前まで表示
+          upcoming.push({
+            routeNumber: route.routeNumber,
+            routeName: route.routeName,
+            destination: route.destination,
+            company: route.company,
+            scheduledTime: `${String(t.hour).padStart(2, '0')}:${String(t.minute).padStart(2, '0')}`,
+            hour: t.hour,
+            minute: t.minute,
+          });
+        }
+      }
+    }
+
+    // 時刻順ソート
+    upcoming.sort((a, b) => (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute));
+
+    return new Response(JSON.stringify(upcoming), {
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=300', // 5分キャッシュ
       },
     });
   }

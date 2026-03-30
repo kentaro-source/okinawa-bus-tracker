@@ -592,78 +592,141 @@ async function getStationCode(stationName) {
   return null;
 }
 
-// 接近情報を取得してBusList互換の形式に変換
+// 接近情報 or 時刻表を取得してBusList互換の形式に変換
 async function getApproachBuses(stationName, destinationName) {
   const stationCode = await getStationCode(stationName);
   if (!stationCode) return [];
 
   try {
-    const buses = await fetchJSON(`${BASE}/Approach?stationCode=${stationCode}`);
-    if (!buses || !Array.isArray(buses)) return [];
+    const result = await fetchJSON(`${BASE}/Approach?stationCode=${stationCode}`);
+    const buses = result?.buses || [];
+    const stationSid = result?.stationSid || null;
 
-    return buses
-      .filter(b => {
-        // 目的地フィルタ: 終点名or路線名に目的地が含まれるか
-        if (!destinationName) return true;
-        const dest = b.destination || '';
-        const route = b.routeName || '';
-        if (matchStation(destinationName, dest)) return true;
-        if (matchStation(destinationName, route)) return true;
-        // 那覇空港エイリアス
-        const aliases = STATION_ALIASES[destinationName];
-        if (aliases) {
-          return aliases.some(a => dest.includes(a) || route.includes(a));
-        }
-        return false;
-      })
-      .map(b => {
-        // 定刻パース
-        const timeParts = b.scheduledTime?.match(/^(\d+):(\d+)$/);
-        const hour = timeParts ? parseInt(timeParts[1]) : null;
-        const minute = timeParts ? parseInt(timeParts[2]) : null;
+    // 接近情報がある場合はそれを使用
+    if (buses.length > 0) {
+      return formatApproachBuses(buses, destinationName);
+    }
 
-        // ETA計算
-        let etaMinutes = null;
-        if (b.arrivalTime) {
-          const arrParts = b.arrivalTime.match(/^(\d+):(\d+)$/);
-          if (arrParts) {
-            const now = new Date();
-            const arrDate = new Date();
-            arrDate.setHours(parseInt(arrParts[1]), parseInt(arrParts[2]), 0, 0);
-            etaMinutes = Math.max(1, Math.round((arrDate - now) / 60000));
-          }
-        } else if (b.isApproaching) {
-          etaMinutes = 1;
+    // 接近情報が空（始発停など）→ 時刻表フォールバック
+    if (stationSid) {
+      const busStopCode = stationCode + '0000';
+      return getTimetableBuses(stationSid, busStopCode, destinationName);
+    }
+
+    return [];
+  } catch (e) {
+    console.warn('Approach/Timetable API failed:', e);
+    return [];
+  }
+}
+
+// 接近情報をBusList形式に変換
+function formatApproachBuses(buses, destinationName) {
+  return buses
+    .filter(b => filterByDestination(b.destination, b.routeName, destinationName))
+    .map(b => {
+      const timeParts = b.scheduledTime?.match(/^(\d+):(\d+)$/);
+      const hour = timeParts ? parseInt(timeParts[1]) : null;
+      const minute = timeParts ? parseInt(timeParts[2]) : null;
+
+      let etaMinutes = null;
+      if (b.arrivalTime) {
+        const arrParts = b.arrivalTime.match(/^(\d+):(\d+)$/);
+        if (arrParts) {
+          const now = new Date();
+          const arrDate = new Date();
+          arrDate.setHours(parseInt(arrParts[1]), parseInt(arrParts[2]), 0, 0);
+          etaMinutes = Math.max(1, Math.round((arrDate - now) / 60000));
         }
+      } else if (b.isApproaching) {
+        etaMinutes = 1;
+      }
+
+      return {
+        routeKey: b.routeNumber,
+        routeName: `${b.routeNumber}番 ${b.routeName.replace(/^.*?線/, '線').replace(/（共同運行）/, '')}`,
+        routeShort: b.routeNumber,
+        direction: '',
+        busId: `approach-${b.routeNumber}-${b.scheduledTime}`,
+        company: '',
+        position: null,
+        gpsTime: null,
+        scheduledTime: b.scheduledTime,
+        scheduledHour: hour,
+        scheduledMinute: minute,
+        etaMinutes,
+        delayMinutes: 0,
+        passed: false,
+        notDeparted: false,
+        destination: b.destination.replace(/（終点）|（起点）/g, ''),
+        speed: null,
+        currentStop: b.currentStop || null,
+        stopsAway: b.stopsAway,
+        viaStops: [],
+        isApproach: true,
+      };
+    });
+}
+
+// 時刻表データをBusList形式に変換（始発停フォールバック）
+async function getTimetableBuses(stationSid, busStopCode, destinationName) {
+  try {
+    const departures = await fetchJSON(
+      `${BASE}/Timetable?stationSid=${encodeURIComponent(stationSid)}&busStopCode=${encodeURIComponent(busStopCode)}`
+    );
+    if (!departures || !Array.isArray(departures)) return [];
+
+    return departures
+      .filter(d => filterByDestination(d.destination, d.routeName, destinationName))
+      .slice(0, 10) // 直近10本まで
+      .map(d => {
+        const now = new Date();
+        const depDate = new Date();
+        depDate.setHours(d.hour, d.minute, 0, 0);
+        const etaMinutes = Math.round((depDate - now) / 60000);
 
         return {
-          routeKey: b.routeNumber,
-          routeName: `${b.routeNumber}番 ${b.routeName.replace(/^.*?線/, '線').replace(/（共同運行）/, '')}`,
-          routeShort: b.routeNumber,
+          routeKey: d.routeNumber,
+          routeName: `${d.routeNumber}番 ${d.destination}行き`,
+          routeShort: d.routeNumber,
           direction: '',
-          busId: `approach-${b.routeNumber}-${b.scheduledTime}`,
-          company: '',
+          busId: `timetable-${d.routeNumber}-${d.scheduledTime}`,
+          company: d.company,
           position: null,
           gpsTime: null,
-          scheduledTime: b.scheduledTime,
-          scheduledHour: hour,
-          scheduledMinute: minute,
-          etaMinutes,
+          scheduledTime: d.scheduledTime,
+          scheduledHour: d.hour,
+          scheduledMinute: d.minute,
+          etaMinutes: Math.max(0, etaMinutes),
           delayMinutes: 0,
           passed: false,
-          notDeparted: false,
-          destination: b.destination.replace(/（終点）|（起点）/g, ''),
+          notDeparted: true,
+          destination: d.destination,
           speed: null,
-          currentStop: b.currentStop || null,
-          stopsAway: b.stopsAway,
+          currentStop: null,
+          stopsAway: null,
           viaStops: [],
-          isApproach: true, // 接近情報由来フラグ
+          isTimetable: true, // 時刻表由来フラグ
         };
       });
   } catch (e) {
-    console.warn('Approach API failed:', e);
+    console.warn('Timetable API failed:', e);
     return [];
   }
+}
+
+// 目的地フィルタ共通処理
+function filterByDestination(dest, routeName, destinationName) {
+  if (!destinationName) return true;
+  dest = dest || '';
+  routeName = routeName || '';
+  if (matchStation(destinationName, dest)) return true;
+  if (matchStation(destinationName, routeName)) return true;
+  const aliases = STATION_ALIASES[destinationName];
+  if (aliases) {
+    return aliases.some(a => dest.includes(a) || routeName.includes(a));
+  }
+  return false;
 }
 
 // Get airport-bound buses from a station (default behavior)
