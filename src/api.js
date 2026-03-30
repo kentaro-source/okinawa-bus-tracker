@@ -129,7 +129,7 @@ function isRunningToday(youbiKbn) {
 }
 
 // Process buses from a single group (上り or 下り)
-function processBuses(buses, stationName, route, group, direction, destinationName) {
+function processBuses(buses, stationName, route, group, direction, destinationName, allStations) {
   const results = [];
 
   for (const bus of buses) {
@@ -141,8 +141,8 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
     const schedules = bus.Daiya.PassedSchedules || [];
     const passages = bus.Passages || [];
 
-    // 祝日便等でPassedSchedulesが空の場合、Passagesデータから表示を試みる
-    if (schedules.length === 0 && passages.length > 0) {
+    // 祝日便等でPassedSchedulesが空の場合、AllStations＋Passagesで通常便と同等に処理
+    if (schedules.length === 0 && passages.length > 0 && allStations) {
       // 出発地を既に通過済みならスキップ
       const passedOurStation = passages.some(p => matchStation(stationName, p.Station.Name));
       if (passedOurStation) continue;
@@ -153,9 +153,61 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         if (passedDest) continue;
       }
 
-      // 現在位置を最後のPassageから取得
+      // AllStationsから出発地のOrderNoを取得
+      const allStationMatch = allStations.find(s => matchStation(stationName, s.Name));
+      const ourOrderNo = allStationMatch?.OrderNo ?? null;
+
+      // 現在位置・stopsAway計算
       const lastPassage = passages[passages.length - 1];
       const currentStop = lastPassage.Station.ShortName || getBaseName(lastPassage.Station.Name);
+      const lastPassageOrder = lastPassage.Schedule?.OrderNo;
+      let stopsAway = null;
+      if (ourOrderNo != null && lastPassageOrder != null) {
+        stopsAway = ourOrderNo - lastPassageOrder;
+        if (stopsAway < 0) continue; // 既に通過
+      }
+
+      // ETA推定: Passagesの通過実績から1停留所あたりの所要時間を計算
+      let etaMinutes = null;
+      let delayMinutes = 0;
+      const lastArrival = parseNetDate(lastPassage.ArrivalTime);
+      if (lastArrival && passages.length >= 2 && stopsAway != null) {
+        const firstPassage = passages[0];
+        const firstArrival = parseNetDate(firstPassage.ArrivalTime);
+        const firstOrder = firstPassage.Schedule?.OrderNo;
+        if (firstArrival && firstOrder != null && lastPassageOrder != null && lastPassageOrder > firstOrder) {
+          const totalMinutes = (lastArrival - firstArrival) / 60000;
+          const totalStops = lastPassageOrder - firstOrder;
+          const minutesPerStop = totalMinutes / totalStops;
+          etaMinutes = Math.round(minutesPerStop * stopsAway + (lastArrival - new Date()) / 60000 + minutesPerStop * stopsAway);
+          // 簡易計算: 残り停留所 × 1停あたり時間 + (最終通過からの経過を考慮)
+          const elapsed = (new Date() - lastArrival) / 60000;
+          etaMinutes = Math.max(1, Math.round(minutesPerStop * stopsAway - elapsed));
+        }
+      }
+
+      // 始発地付近（OrderNo ≤ 2）では遅延データ非表示
+      const isNearOrigin = lastPassageOrder != null && lastPassageOrder <= 2;
+      if (!isNearOrigin && lastArrival && lastPassage.Schedule?.ScheduledTime) {
+        const lastSched = lastPassage.Schedule.ScheduledTime;
+        const lastSchedDate = new Date();
+        lastSchedDate.setHours(lastSched.Hour, lastSched.Minute, 0, 0);
+        delayMinutes = Math.round((lastArrival - lastSchedDate) / 60000);
+      }
+
+      // 経由地抽出（AllStationsベース）
+      const viaStops = [];
+      if (ourOrderNo != null) {
+        for (const s of allStations) {
+          const sOrder = s.OrderNo;
+          if (sOrder == null || sOrder <= ourOrderNo) continue;
+          const base = getBaseName(s.Name);
+          if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
+            viaStops.push(base);
+          }
+          if (viaStops.length >= 3) break;
+        }
+      }
 
       results.push({
         routeKey: route.short,
@@ -172,15 +224,15 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         scheduledTime: null,
         scheduledHour: null,
         scheduledMinute: null,
-        etaMinutes: null,
-        delayMinutes: 0,
+        etaMinutes,
+        delayMinutes: stopsAway != null && stopsAway <= 10 ? delayMinutes : 0,
         passed: false,
         notDeparted: false,
         destination: group.YukisakiName || '',
         speed: bus.Speed,
-        currentStop,
-        stopsAway: null,
-        viaStops: [],
+        currentStop: (lastPassageOrder == null || lastPassageOrder > 2) ? currentStop : null,
+        stopsAway,
+        viaStops,
       });
       continue;
     }
@@ -425,7 +477,7 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 
         // Only fetch bus locations after confirming route serves both stations
         const buses = await getBusLocation(route.keitouSid, group.Sid);
-        const processed = processBuses(buses, stationName, route, group, direction, destinationName);
+        const processed = processBuses(buses, stationName, route, group, direction, destinationName, stations);
         results.push(...processed);
       }
     } catch (e) {
