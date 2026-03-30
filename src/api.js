@@ -381,9 +381,13 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
           const notYetAtDep = fromDep.filter(b => !b.passed);
           results.push(...notYetAtDep);
 
-          // 出発地通過済みのバス → 目的地到着ETAで再計算
+          // 出発地通過済み＆目的地未到着のバス → 目的地到着ETAで再計算
           const fromDest = processBuses(buses, destinationName, route, group, direction);
           const enRoute = fromDest.filter(destBus => {
+            // 目的地を既に通過したバスは除外
+            if (destBus.passed) return false;
+            // ETA切れも除外
+            if (destBus.etaMinutes !== null && destBus.etaMinutes <= 0) return false;
             // 出発地を通過済みか確認
             const busData = buses.find(b => b.Bus.Id === destBus.busId);
             if (!busData) return false;
