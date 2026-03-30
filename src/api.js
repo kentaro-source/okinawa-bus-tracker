@@ -632,7 +632,9 @@ function formatApproachBuses(buses, destinationName) {
     .filter(b => {
       if (!destinationName) return true;
       if (filterByDestination(b.destination, b.routeName, destinationName)) return true;
-      if (destRoutes && destRoutes.includes(b.routeNumber)) return true;
+      // 駅キャッシュで路線が目的地を通るか確認（キャッシュなければ全表示）
+      if (!destRoutes) return true;
+      if (destRoutes.includes(b.routeNumber)) return true;
       return false;
     })
     .map(b => {
@@ -698,8 +700,9 @@ async function getTimetableBuses(stationSid, busStopCode, destinationName) {
         if (!destinationName) return true;
         // まず終点名で直接マッチ（終点が目的地ならOK）
         if (filterByDestination(d.destination, d.routeName, destinationName)) return true;
-        // 駅キャッシュで路線番号が目的地を通るか確認
-        if (destRoutes && destRoutes.includes(d.routeNumber)) return true;
+        // 駅キャッシュで路線番号が目的地を通るか確認（キャッシュなければ全表示）
+        if (!destRoutes) return true;
+        if (destRoutes.includes(d.routeNumber)) return true;
         return false;
       })
       .slice(0, 10) // 直近10本まで
