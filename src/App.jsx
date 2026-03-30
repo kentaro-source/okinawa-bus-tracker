@@ -123,7 +123,7 @@ function App() {
       <header className="header">
         <div className="header-route">
           <button className="header-station-btn" onClick={() => setSelectorMode('from')}>
-            <span className="header-from">{toDisplayName(station)}</span>
+            <span className="header-from">{station}</span>
           </button>
           <a className="btn-map-icon" href={googleMapsUrl(station)} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
           <button className="header-swap-btn" onClick={() => {
