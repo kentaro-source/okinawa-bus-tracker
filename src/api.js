@@ -154,8 +154,13 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
       }
 
       // AllStationsからOrderNoを逆引きするヘルパー
+      // Passage側のStation.Nameにも括弧付き方向表記が含まれるため、baseName同士で比較
       const getOrderFromAllStations = (name) => {
-        const match = allStations.find(s => matchStation(name, s.Name));
+        const baseName = getBaseName(name);
+        const match = allStations.find(s => {
+          const sBase = getBaseName(s.Name);
+          return sBase === baseName || sBase.includes(baseName) || baseName.includes(sBase);
+        });
         return match?.OrderNo ?? null;
       };
 
