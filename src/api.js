@@ -234,18 +234,19 @@ function processBuses(buses, stationName, route, group, direction) {
       etaMinutes = 1; // keep visible, show as "まもなく"
     }
 
-    // 出発駅以降の主要経由地を抽出
+    // 目的地（=ターゲット駅）より前の主要経由地を抽出
     const ourOrder = stationSchedule.OrderNo;
     const viaStops = [];
     if (ourOrder != null) {
       for (const s of schedules) {
-        if (s.OrderNo <= ourOrder) continue;
+        if (s.OrderNo >= ourOrder) continue; // 目的地より前だけ
         const base = getBaseName(s.Station.Name);
         if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
           viaStops.push(base);
         }
-        if (viaStops.length >= 3) break;
       }
+      // 最後の3件（目的地に近い経由地を優先）
+      if (viaStops.length > 3) viaStops.splice(0, viaStops.length - 3);
     }
 
     results.push({

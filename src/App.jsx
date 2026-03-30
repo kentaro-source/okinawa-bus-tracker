@@ -98,12 +98,13 @@ function App() {
   }, [fetchBuses, destination]);
 
   const changeDestination = useCallback((newDest) => {
-    setDestination(newDest);
-    localStorage.setItem(LAST_DEST_KEY, newDest);
+    const internal = toInternalName(newDest);
+    setDestination(internal);
+    localStorage.setItem(LAST_DEST_KEY, internal);
     setSelectorMode(null);
     setLoading(true);
     setBuses([]);
-    fetchBuses(station, newDest);
+    fetchBuses(station, internal);
   }, [fetchBuses, station]);
 
   const resetToAirport = useCallback(() => {
@@ -179,9 +180,9 @@ function App() {
             <span className="header-arrow">→</span>
           </button>
           <button className="header-station-btn" onClick={() => setSelectorMode('to')}>
-            <span className={`header-to ${isAirport ? '' : 'custom-dest'}`}>{destination}</span>
+            <span className={`header-to ${isAirport ? '' : 'custom-dest'}`}>{toDisplayName(destination)}</span>
           </button>
-          <a className="btn-map-icon" href={googleMapsUrl(destination)} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
+          <a className="btn-map-icon" href={googleMapsUrl(toDisplayName(destination))} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
           <button
             className={`btn-fav ${isFavorite ? 'is-fav' : ''}`}
             onClick={() => toggleFavorite(station)}
@@ -217,10 +218,10 @@ function App() {
         )}
         {!loading && filteredBuses.length === 0 && !error && (
           <div className="empty">
-            現在、{toDisplayName(station)}→{destination}のバスは見つかりませんでした
+            現在、{toDisplayName(station)}→{toDisplayName(destination)}のバスは見つかりませんでした
           </div>
         )}
-        <BusList buses={filteredBuses} destination={destination} />
+        <BusList buses={filteredBuses} destination={toDisplayName(destination)} />
       </main>
 
       <footer className="footer">
