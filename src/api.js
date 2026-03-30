@@ -135,8 +135,8 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
   for (const bus of buses) {
     if (!bus.Daiya) continue;
 
-    // Skip buses not scheduled for today's day of week
-    if (!isRunningToday(bus.Daiya.YoubiKbn)) continue;
+    // BusLocation APIが返すバスは実際に運行中 → YoubiKbnフィルタは不要
+    // （祝日便が平日に走るケース等、YoubiKbnが実態と合わない場合がある）
 
     const schedules = bus.Daiya.PassedSchedules || [];
     const passages = bus.Passages || [];
