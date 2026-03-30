@@ -240,11 +240,17 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
       }
 
       // 経由地抽出（AllStationsベース）
+      // 出発地〜目的地間の主要経由地を抽出
+      let destOrderNo = null;
+      if (destinationName) {
+        destOrderNo = getOrderFromAllStations(destinationName);
+      }
       const viaStops = [];
       if (ourOrderNo != null) {
         for (const s of allStations) {
           const sOrder = s.OrderNo;
           if (sOrder == null || sOrder <= ourOrderNo) continue;
+          if (destOrderNo != null && sOrder >= destOrderNo) break; // 目的地以降は不要
           const base = getBaseName(s.Name);
           if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
             viaStops.push(base);
@@ -384,12 +390,19 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
       etaMinutes = 1; // keep visible, show as "まもなく"
     }
 
-    // 出発地より先の主要経由地を抽出
+    // 出発地〜目的地間の主要経由地を抽出
     const ourOrder = stationSchedule.OrderNo;
     const viaStops = [];
     if (ourOrder != null) {
+      // 目的地のOrderNoを取得（目的地より先の経由地は不要）
+      let destOrder = null;
+      if (destinationName) {
+        const destSchedule = schedules.find(s => matchStation(destinationName, s.Station.Name));
+        destOrder = destSchedule?.OrderNo ?? null;
+      }
       for (const s of schedules) {
         if (s.OrderNo <= ourOrder) continue;
+        if (destOrder != null && s.OrderNo >= destOrder) break; // 目的地以降は不要
         const base = getBaseName(s.Station.Name);
         if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
           viaStops.push(base);
