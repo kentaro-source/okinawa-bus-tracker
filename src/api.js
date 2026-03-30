@@ -141,6 +141,50 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
     const schedules = bus.Daiya.PassedSchedules || [];
     const passages = bus.Passages || [];
 
+    // 祝日便等でPassedSchedulesが空の場合、Passagesデータから表示を試みる
+    if (schedules.length === 0 && passages.length > 0) {
+      // 出発地を既に通過済みならスキップ
+      const passedOurStation = passages.some(p => matchStation(stationName, p.Station.Name));
+      if (passedOurStation) continue;
+
+      // 目的地を既に通過済みならスキップ（行き先が逆方向）
+      if (destinationName) {
+        const passedDest = passages.some(p => matchStation(destinationName, p.Station.Name));
+        if (passedDest) continue;
+      }
+
+      // 現在位置を最後のPassageから取得
+      const lastPassage = passages[passages.length - 1];
+      const currentStop = lastPassage.Station.ShortName || getBaseName(lastPassage.Station.Name);
+
+      results.push({
+        routeKey: route.short,
+        routeName: route.name,
+        routeShort: route.short,
+        direction,
+        busId: bus.Bus.Id,
+        company: bus.Bus.Company.Name,
+        position: {
+          lat: bus.Position.Latitude,
+          lng: bus.Position.Longitude,
+        },
+        gpsTime: parseNetDate(bus.GpsTime),
+        scheduledTime: null,
+        scheduledHour: null,
+        scheduledMinute: null,
+        etaMinutes: null,
+        delayMinutes: 0,
+        passed: false,
+        notDeparted: false,
+        destination: group.YukisakiName || '',
+        speed: bus.Speed,
+        currentStop,
+        stopsAway: null,
+        viaStops: [],
+      });
+      continue;
+    }
+
     // 目的地が指定されている場合、この便のスケジュールに目的地があるか確認
     // （AllStationsでは通るが、個別便では通らないケースを除外）
     if (destinationName) {
