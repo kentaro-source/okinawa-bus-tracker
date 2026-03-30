@@ -251,6 +251,7 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         currentStop: (lastPassageOrder == null || lastPassageOrder > 2) ? currentStop : null,
         stopsAway,
         viaStops,
+        isHolidayVariant: true,
       });
       continue;
     }
