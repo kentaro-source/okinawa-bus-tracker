@@ -29,7 +29,7 @@ function getStatusEmoji(eta) {
 }
 
 function formatETA(minutes) {
-  if (minutes === null) return '不明';
+  if (minutes === null) return '走行中';
   if (minutes <= 0) return 'まもなく';
   if (minutes >= 60) return `${Math.floor(minutes / 60)}時間${minutes % 60}分`;
   return `あと${minutes}分`;
