@@ -10,6 +10,13 @@ const STATION_ALIASES = {
   '那覇空港': ['旅客ターミナル前'],
 };
 
+// 経由地として表示する主要バス停（ユーザーが判断しやすい目印）
+const VIA_LANDMARKS = [
+  '久茂地', '牧志', '県庁北口', '県庁前', '泊高橋', '国際通り入口',
+  '普天間', '宜野湾', '北谷', 'コンベンションセンター前',
+  '沖縄南ＩＣ', '沖縄北ＩＣ', '西原ＩＣ',
+];
+
 // 括弧内の方向表記を除外してバス停名の本体だけ取得
 function getBaseName(name) {
   return name.replace(/（.*?）/g, '').replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim();
@@ -227,6 +234,20 @@ function processBuses(buses, stationName, route, group, direction) {
       etaMinutes = 1; // keep visible, show as "まもなく"
     }
 
+    // 出発駅以降の主要経由地を抽出
+    const ourOrder = stationSchedule.OrderNo;
+    const viaStops = [];
+    if (ourOrder != null) {
+      for (const s of schedules) {
+        if (s.OrderNo <= ourOrder) continue;
+        const base = getBaseName(s.Station.Name);
+        if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
+          viaStops.push(base);
+        }
+        if (viaStops.length >= 3) break;
+      }
+    }
+
     results.push({
       routeKey: route.short,
       routeName: route.name,
@@ -250,6 +271,7 @@ function processBuses(buses, stationName, route, group, direction) {
       speed: bus.Speed,
       currentStop,
       stopsAway,
+      viaStops,
     });
   }
 

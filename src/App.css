@@ -353,6 +353,12 @@ body {
   text-underline-offset: 2px;
 }
 
+.bus-via {
+  font-size: 11px;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
 .bus-detail {
   display: flex;
   align-items: center;

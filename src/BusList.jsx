@@ -76,6 +76,9 @@ function BusCard({ bus }) {
             )}
           </div>
         ) : null}
+        {bus.viaStops && bus.viaStops.length > 0 && (
+          <div className="bus-via">経由: {bus.viaStops.join('・')}</div>
+        )}
         <div className="bus-detail">
           <span className="bus-company">{bus.company}</span>
           {bus.scheduledTime && <span className="bus-scheduled">定刻 {bus.scheduledTime}</span>}
