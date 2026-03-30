@@ -673,7 +673,7 @@ function formatApproachBuses(buses, destinationName) {
         notDeparted: false,
         destination: b.destination.replace(/（終点）|（起点）/g, ''),
         speed: null,
-        currentStop: b.currentStop || null,
+        currentStop: b.currentStop?.replace(/\[着\]|\[発\]/g, '') || null,
         stopsAway: b.stopsAway,
         viaStops: [],
         isApproach: true,
