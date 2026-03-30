@@ -372,37 +372,8 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 
         // Only fetch bus locations after confirming route serves both stations
         const buses = await getBusLocation(route.keitouSid, group.Sid);
-
-        // 出発地基準でバスを処理（まだ来ていないバス）
-        const fromDep = processBuses(buses, stationName, route, group, direction);
-
-        if (destinationName) {
-          // 出発地未通過のバス → 出発地到着ETA
-          const notYetAtDep = fromDep.filter(b => !b.passed);
-          results.push(...notYetAtDep);
-
-          // 出発地通過済み＆目的地未到着のバス → 目的地到着ETAで再計算
-          const fromDest = processBuses(buses, destinationName, route, group, direction);
-          const enRoute = fromDest.filter(destBus => {
-            // 目的地を既に通過したバスは除外
-            if (destBus.passed) return false;
-            // ETA切れも除外
-            if (destBus.etaMinutes !== null && destBus.etaMinutes <= 0) return false;
-            // 出発地を通過済みか確認
-            const busData = buses.find(b => b.Bus.Id === destBus.busId);
-            if (!busData) return false;
-            const schedules = busData.Daiya?.PassedSchedules || [];
-            const depSchedule = schedules.find(s => matchStation(stationName, s.Station.Name));
-            if (!depSchedule) return false;
-            const passages = busData.Passages || [];
-            return passages.some(p => p.Station.Name === depSchedule.Station.Name);
-          });
-          // 出発地通過済みバスは「乗車中」マーク付き
-          enRoute.forEach(b => { b.enRoute = true; });
-          results.push(...enRoute);
-        } else {
-          results.push(...fromDep);
-        }
+        const processed = processBuses(buses, stationName, route, group, direction);
+        results.push(...processed);
       }
     } catch (e) {
       console.warn(`Route ${route.short} failed:`, e);
