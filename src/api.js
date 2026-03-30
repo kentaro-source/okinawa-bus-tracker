@@ -772,16 +772,14 @@ export async function getBusesBetween(fromStation, toStation) {
   // 接近情報は目的地フィルタなしで取得（getBusesBetween側でフィルタ）
   const [realtime, approach] = await Promise.all([
     fetchBusesForRoutes(routes, fromStation, toStation),
-    getApproachBuses(fromStation, null),
+    getApproachBuses(fromStation, toStation),
   ]);
 
-  // 接近情報を目的地でフィルタ: 駅キャッシュ＋終点名の両方で判定
+  // 接近情報を目的地で二重フィルタ（getApproachBuses内でも、ここでも）
   const destRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
   const filteredApproach = toStation
     ? approach.filter(b => {
-        // 終点名が目的地と一致
         if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-        // 駅キャッシュでこの路線が目的地を通るか確認
         if (destRoutes && destRoutes.includes(b.routeShort)) return true;
         return false;
       })

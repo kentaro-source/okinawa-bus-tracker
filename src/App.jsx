@@ -14,6 +14,8 @@ const LAST_DEST_KEY = 'bus-tracker-last-dest';
 // 表示名→内部名の変換（APIに存在しないバス停名を実名に変換）
 function toInternalName(name) {
   if (name === '那覇空港') return '旅客ターミナル前';
+  if (name === '国内線旅客ターミナル前') return '旅客ターミナル前';
+  if (name === '国際線旅客ターミナル前') return '旅客ターミナル前';
   return name;
 }
 // 内部名→表示名の逆変換（正式なバス停名を表示）
@@ -54,7 +56,7 @@ function App() {
     toInternalName(localStorage.getItem(LAST_STATION_KEY) || '那覇バスターミナル')
   );
   const [destination, setDestination] = useState(() =>
-    localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル'
+    toInternalName(localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル')
   );
   const [buses, setBuses] = useState([]);
   const [loading, setLoading] = useState(true);

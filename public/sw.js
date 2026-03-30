@@ -1,4 +1,4 @@
-const CACHE_NAME = 'bus-tracker-v3';
+const CACHE_NAME = 'bus-tracker-v4';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
@@ -28,18 +28,14 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Static assets: cache first, fallback to network
+  // Network first, cache fallback（常に最新コードを取得、オフライン時のみキャッシュ使用）
   e.respondWith(
-    caches.match(e.request).then((cached) => {
-      const fetchPromise = fetch(e.request).then((response) => {
-        if (response.ok) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
-        }
-        return response;
-      }).catch(() => cached);
-
-      return cached || fetchPromise;
-    })
+    fetch(e.request).then((response) => {
+      if (response.ok) {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+      }
+      return response;
+    }).catch(() => caches.match(e.request))
   );
 });
