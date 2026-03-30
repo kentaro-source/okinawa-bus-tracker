@@ -41,7 +41,7 @@ function formatDelay(minutes) {
   return `${Math.abs(minutes)}分早い`;
 }
 
-function BusCard({ bus, destination }) {
+function BusCard({ bus }) {
   const color = getStatusColor(bus.etaMinutes);
 
   return (
@@ -55,9 +55,7 @@ function BusCard({ bus, destination }) {
           <span className="route-name">{bus.routeName.replace(/^\d+番\s*/, '')}</span>
         </div>
         <div className="bus-eta">
-          <span className="eta-time">
-            {destination ? `${destination}に` : ''}{formatETA(bus.etaMinutes)}
-          </span>
+          <span className="eta-time">{formatETA(bus.etaMinutes)}</span>
           {bus.delayMinutes !== 0 && !bus.notDeparted && bus.stopsAway != null && bus.stopsAway <= 10 && (
             <span className={`eta-delay ${bus.delayMinutes > 0 ? 'late' : 'early'}`}>
               ({formatDelay(bus.delayMinutes)})
@@ -91,7 +89,7 @@ function BusCard({ bus, destination }) {
   );
 }
 
-export default function BusList({ buses, destination }) {
+export default function BusList({ buses }) {
   if (!buses || buses.length === 0) return null;
 
   const running = buses.filter(b => !b.notDeparted);
@@ -103,7 +101,7 @@ export default function BusList({ buses, destination }) {
         <div className="bus-group">
           <div className="bus-group-header">🚌 走行中</div>
           {running.map((bus, i) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} destination={destination} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
           ))}
         </div>
       )}
@@ -111,7 +109,7 @@ export default function BusList({ buses, destination }) {
         <div className="bus-group">
           <div className="bus-group-header">🕐 まもなく出発</div>
           {notDeparted.map((bus) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} destination={destination} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
           ))}
         </div>
       )}

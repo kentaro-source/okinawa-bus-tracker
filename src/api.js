@@ -234,19 +234,18 @@ function processBuses(buses, stationName, route, group, direction) {
       etaMinutes = 1; // keep visible, show as "まもなく"
     }
 
-    // 目的地（=ターゲット駅）より前の主要経由地を抽出
+    // 出発地より先の主要経由地を抽出
     const ourOrder = stationSchedule.OrderNo;
     const viaStops = [];
     if (ourOrder != null) {
       for (const s of schedules) {
-        if (s.OrderNo >= ourOrder) continue; // 目的地より前だけ
+        if (s.OrderNo <= ourOrder) continue;
         const base = getBaseName(s.Station.Name);
         if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
           viaStops.push(base);
         }
+        if (viaStops.length >= 3) break;
       }
-      // 最後の3件（目的地に近い経由地を優先）
-      if (viaStops.length > 3) viaStops.splice(0, viaStops.length - 3);
     }
 
     results.push({
@@ -373,9 +372,7 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 
         // Only fetch bus locations after confirming route serves both stations
         const buses = await getBusLocation(route.keitouSid, group.Sid);
-        // 目的地指定時は目的地到着ETAを表示（始発駅の通過済み問題を回避）
-        const targetStation = destinationName || stationName;
-        const processed = processBuses(buses, targetStation, route, group, direction);
+        const processed = processBuses(buses, stationName, route, group, direction);
         results.push(...processed);
       }
     } catch (e) {

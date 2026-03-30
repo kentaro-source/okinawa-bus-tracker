@@ -221,7 +221,7 @@ function App() {
             現在、{toDisplayName(station)}→{toDisplayName(destination)}のバスは見つかりませんでした
           </div>
         )}
-        <BusList buses={filteredBuses} destination={toDisplayName(destination)} />
+        <BusList buses={filteredBuses} />
       </main>
 
       <footer className="footer">
