@@ -18,6 +18,29 @@ const POPULAR_STOPS = [
   '沖縄北ＩＣ',
 ];
 
+// 主要バス停の座標（APIから座標が取れない場合のフォールバック）
+const FALLBACK_COORDS = {
+  '那覇バスターミナル': { lat: 26.2108, lng: 127.6765 },
+  '国内線旅客ターミナル前': { lat: 26.2066, lng: 127.6462 },
+  '国際線旅客ターミナル前': { lat: 26.2088, lng: 127.6440 },
+  '県庁北口': { lat: 26.2148, lng: 127.6793 },
+  '牧志': { lat: 26.2167, lng: 127.6878 },
+  '泊高橋': { lat: 26.2268, lng: 127.6824 },
+  '普天間': { lat: 26.3424, lng: 127.7778 },
+  'アメリカンビレッジ': { lat: 26.3266, lng: 127.7617 },
+  'イオンモール沖縄ライカム': { lat: 26.3341, lng: 127.7693 },
+  '具志川バスターミナル': { lat: 26.3778, lng: 127.8358 },
+  'コンベンションセンター前': { lat: 26.3190, lng: 127.7431 },
+  '名護バスターミナル': { lat: 26.5917, lng: 127.9772 },
+  'おもろまち駅前': { lat: 26.2267, lng: 127.6944 },
+  '国際通り入口': { lat: 26.2153, lng: 127.6808 },
+  '旭橋': { lat: 26.2117, lng: 127.6753 },
+  '古島': { lat: 26.2350, lng: 127.7028 },
+  '嘉手納': { lat: 26.3576, lng: 127.7570 },
+  '読谷': { lat: 26.3964, lng: 127.7445 },
+  '北谷': { lat: 26.3266, lng: 127.7617 },
+};
+
 // Haversine distance in meters
 function haversineDistance(lat1, lng1, lat2, lng2) {
   const R = 6371000;
@@ -96,6 +119,16 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
   useEffect(() => {
     const cached = loadStationCache();
     if (cached) {
+      // フォールバック座標を既存キャッシュに補完
+      let updated = false;
+      for (const s of cached) {
+        if (!s.lat && FALLBACK_COORDS[s.name]) {
+          s.lat = FALLBACK_COORDS[s.name].lat;
+          s.lng = FALLBACK_COORDS[s.name].lng;
+          updated = true;
+        }
+      }
+      if (updated) saveStationCache(cached);
       setAllStations(cached);
       return;
     }
@@ -118,11 +151,12 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 .replace(/[\s　]+[A-Za-z0-9０-９]+$/g, '')
                 .trim();
               if (!stationSet.has(cleanName)) {
+                const fallback = FALLBACK_COORDS[cleanName];
                 stationSet.set(cleanName, {
                   name: cleanName,
                   fullName: s.Name,
-                  lat: s.Latitude || null,
-                  lng: s.Longitude || null,
+                  lat: s.Latitude || fallback?.lat || null,
+                  lng: s.Longitude || fallback?.lng || null,
                   routes: [route.short],
                 });
               } else {
@@ -186,11 +220,23 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       })()
     : allStations;
 
-  const handleGeolocate = () => {
+  const handleGeolocate = async () => {
     if (!navigator.geolocation) {
       alert('位置情報に対応していません');
       return;
     }
+
+    // 位置情報の権限を確認・要求
+    if (navigator.permissions) {
+      try {
+        const permission = await navigator.permissions.query({ name: 'geolocation' });
+        if (permission.state === 'denied') {
+          alert('位置情報がブロックされています。\nブラウザの設定から位置情報を許可してください。');
+          return;
+        }
+      } catch {}
+    }
+
     setGeoLoading(true);
     setNearbyStations(null);
     navigator.geolocation.getCurrentPosition(
@@ -204,13 +250,22 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
           }))
           .sort((a, b) => a.distance - b.distance)
           .slice(0, 5);
-        setNearbyStations(withDistance);
+        if (withDistance.length === 0) {
+          alert('近くのバス停が見つかりませんでした。\nバス停データを再読み込みしてください。');
+        }
+        setNearbyStations(withDistance.length > 0 ? withDistance : null);
         setGeoLoading(false);
         setQuery('');
       },
-      () => {
+      (err) => {
         setGeoLoading(false);
-        alert('位置情報を取得できませんでした');
+        if (err.code === 1) {
+          alert('位置情報が許可されていません。\nブラウザの設定から許可してください。');
+        } else if (err.code === 3) {
+          alert('位置情報の取得がタイムアウトしました。\nもう一度お試しください。');
+        } else {
+          alert('位置情報を取得できませんでした。');
+        }
       },
       { timeout: 10000, enableHighAccuracy: true }
     );
