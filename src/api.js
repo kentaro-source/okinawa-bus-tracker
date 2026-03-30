@@ -148,8 +148,8 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
       const passedOurStation = passages.some(p => matchStation(stationName, p.Station.Name));
       if (passedOurStation) continue;
 
-      // 目的地を既に通過済みならスキップ（行き先が逆方向）
       if (destinationName) {
+        // 目的地を既に通過済みならスキップ（行き先が逆方向）
         const passedDest = passages.some(p => matchStation(destinationName, p.Station.Name));
         if (passedDest) continue;
       }
@@ -167,6 +167,14 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
 
       // AllStationsから出発地のOrderNoを取得
       const ourOrderNo = getOrderFromAllStations(stationName);
+
+      // 目的地がAllStations上で出発地より先にあるか確認
+      // （AllStationsは全コース共通だが、OrderNoで方向判定は可能）
+      if (destinationName && ourOrderNo != null) {
+        const destOrderNo = getOrderFromAllStations(destinationName);
+        if (destOrderNo != null && destOrderNo <= ourOrderNo) continue; // 目的地が手前＝このコースでは行けない
+        if (destOrderNo == null) continue; // 目的地がAllStationsにない＝この路線では行けない
+      }
 
       // 現在位置・stopsAway計算
       const lastPassage = passages[passages.length - 1];
