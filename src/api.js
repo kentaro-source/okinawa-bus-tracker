@@ -176,7 +176,7 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
       const lastArrival = parseNetDate(lastPassage.ArrivalTime);
       const isNearOrigin = lastPassageOrder != null && lastPassageOrder <= 2;
 
-      if (stopsAway != null && passages.length >= 2) {
+      if (passages.length >= 2) {
         const firstPassage = passages[0];
         const firstArrival = parseNetDate(firstPassage.ArrivalTime);
         const firstOrder = firstPassage.Schedule?.OrderNo;
@@ -186,22 +186,24 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         if (firstOrder != null && lastPassageOrder != null && lastPassageOrder > firstOrder) {
           const stopCount = lastPassageOrder - firstOrder;
 
-          // 定刻推定: スケジュール上の1停あたり時間 × 残り停留所
-          if (firstSched && lastSched) {
-            const schedFirst = firstSched.Hour * 60 + firstSched.Minute;
-            const schedLast = lastSched.Hour * 60 + lastSched.Minute;
-            const schedPerStop = (schedLast - schedFirst) / stopCount;
-            const estMinutes = schedLast + Math.round(schedPerStop * stopsAway);
-            scheduledHour = Math.floor(estMinutes / 60) % 24;
-            scheduledMinute = estMinutes % 60;
-            scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
-          }
+          if (stopsAway != null) {
+            // 定刻推定: スケジュール上の1停あたり時間 × 残り停留所
+            if (firstSched && lastSched) {
+              const schedFirst = firstSched.Hour * 60 + firstSched.Minute;
+              const schedLast = lastSched.Hour * 60 + lastSched.Minute;
+              const schedPerStop = (schedLast - schedFirst) / stopCount;
+              const estMinutes = schedLast + Math.round(schedPerStop * stopsAway);
+              scheduledHour = Math.floor(estMinutes / 60) % 24;
+              scheduledMinute = estMinutes % 60;
+              scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
+            }
 
-          // ETA推定: 実績ベースの1停あたり時間
-          if (firstArrival && lastArrival) {
-            const actualPerStop = (lastArrival - firstArrival) / 60000 / stopCount;
-            const elapsed = (new Date() - lastArrival) / 60000;
-            etaMinutes = Math.max(1, Math.round(actualPerStop * stopsAway - elapsed));
+            // ETA推定: 実績ベースの1停あたり時間
+            if (firstArrival && lastArrival) {
+              const actualPerStop = (lastArrival - firstArrival) / 60000 / stopCount;
+              const elapsed = (new Date() - lastArrival) / 60000;
+              etaMinutes = Math.max(1, Math.round(actualPerStop * stopsAway - elapsed));
+            }
           }
 
           // 遅延推定

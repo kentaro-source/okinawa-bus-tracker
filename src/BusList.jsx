@@ -53,7 +53,7 @@ function BusCard({ bus }) {
         <div className="bus-route">
           <span className="route-number">{bus.routeShort}番</span>
           <span className="route-name">{bus.routeName.replace(/^\d+番\s*/, '')}</span>
-          {bus.isHolidayVariant && <span className="bus-holiday-tag">祝日便</span>}
+          {bus.isHolidayVariant && <span className="bus-holiday-tag">臨時</span>}
         </div>
         <div className="bus-eta">
           <span className="eta-time">{formatETA(bus.etaMinutes)}</span>
