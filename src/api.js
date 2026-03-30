@@ -286,7 +286,7 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         delayMinutes: stopsAway != null && stopsAway <= 10 ? delayMinutes : 0,
         passed: false,
         notDeparted: false,
-        destination: group.YukisakiName || '',
+        destination: getBaseName(allStations[allStations.length - 1]?.Name) || group.YukisakiName || '',
         speed: bus.Speed,
         currentStop: (lastPassageOrder == null || lastPassageOrder > 2) ? currentStop : null,
         stopsAway,
