@@ -676,8 +676,21 @@ async function getTimetableBuses(stationSid, busStopCode, destinationName) {
     );
     if (!departures || !Array.isArray(departures)) return [];
 
+    // 目的地フィルタ: 時刻表は終点しか持たないため、駅キャッシュで路線が目的地を通るか確認
+    let destRoutes = null;
+    if (destinationName) {
+      destRoutes = getCachedRoutesForStation(destinationName);
+    }
+
     return departures
-      .filter(d => filterByDestination(d.destination, d.routeName, destinationName))
+      .filter(d => {
+        if (!destinationName) return true;
+        // まず終点名で直接マッチ（終点が目的地ならOK）
+        if (filterByDestination(d.destination, d.routeName, destinationName)) return true;
+        // 駅キャッシュで路線番号が目的地を通るか確認
+        if (destRoutes && destRoutes.includes(d.routeNumber)) return true;
+        return false;
+      })
       .slice(0, 10) // 直近10本まで
       .map(d => {
         const now = new Date();
