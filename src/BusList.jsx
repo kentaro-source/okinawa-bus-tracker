@@ -67,6 +67,14 @@ function BusCard({ bus }) {
             🕐 {String(bus.scheduledHour).padStart(2,'0')}:{String(bus.scheduledMinute).padStart(2,'0')}発
             {bus.delayMinutes > 0 ? `（遅延${bus.delayMinutes}分）` : '（未出発）'}
           </div>
+        ) : bus.enRoute ? (
+          <div className="bus-position en-route">
+            🚌 目的地へ移動中
+            {bus.currentStop && <>　📍 {bus.currentStop}<MapLink stationName={bus.currentStop} /></>}
+            {bus.stopsAway != null && bus.stopsAway > 0 && (
+              <span className="stops-away">（{bus.stopsAway}停留所前）</span>
+            )}
+          </div>
         ) : bus.currentStop ? (
           <div className="bus-position">
             📍 {bus.currentStop}
