@@ -273,30 +273,35 @@ export async function runWithConcurrency(tasks, limit) {
 }
 
 // Look up which route numbers serve a station (from station cache)
-// Handles aliases (e.g. 那覇空港 → 旅客ターミナル前)
+// Collects routes from ALL matching stations (not just the first match)
 function getCachedRoutesForStation(stationName) {
   try {
     const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
     if (cached && cached.data) {
-      // Direct match
-      const station = cached.data.find(s =>
-        s.name === stationName || s.name.includes(stationName)
-      );
-      if (station) return station.routes;
+      const routes = new Set();
+
+      // Direct/partial match against all stations
+      for (const s of cached.data) {
+        if (s.name === stationName || s.name.includes(stationName) || stationName.includes(s.name)) {
+          s.routes.forEach(r => routes.add(r));
+        }
+      }
 
       // Alias match (e.g. 那覇空港 → 旅客ターミナル前)
-      const aliases = STATION_ALIASES[stationName];
-      if (aliases) {
-        const routes = new Set();
-        for (const alias of aliases) {
-          for (const s of cached.data) {
-            if (s.name.includes(alias)) {
-              s.routes.forEach(r => routes.add(r));
+      if (routes.size === 0) {
+        const aliases = STATION_ALIASES[stationName];
+        if (aliases) {
+          for (const alias of aliases) {
+            for (const s of cached.data) {
+              if (s.name.includes(alias)) {
+                s.routes.forEach(r => routes.add(r));
+              }
             }
           }
         }
-        if (routes.size > 0) return Array.from(routes);
       }
+
+      if (routes.size > 0) return Array.from(routes);
     }
   } catch {}
   return null;
