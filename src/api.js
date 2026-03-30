@@ -372,7 +372,9 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 
         // Only fetch bus locations after confirming route serves both stations
         const buses = await getBusLocation(route.keitouSid, group.Sid);
-        const processed = processBuses(buses, stationName, route, group, direction);
+        // 目的地指定時は目的地到着ETAを表示（始発駅の通過済み問題を回避）
+        const targetStation = destinationName || stationName;
+        const processed = processBuses(buses, targetStation, route, group, direction);
         results.push(...processed);
       }
     } catch (e) {
