@@ -151,6 +151,7 @@ function App() {
   }, [station, destination, fetchBuses]);
 
   const isFavorite = favorites.includes(station);
+  const isDestFavorite = favorites.includes(destination);
 
   const filteredBuses = buses;
 
@@ -183,6 +184,13 @@ function App() {
             <span className="header-to custom-dest">{toDisplayName(destination)}</span>
           </button>
           <a className="btn-map-icon" href={googleMapsUrl(toDisplayName(destination))} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
+          <button
+            className={`btn-fav ${isDestFavorite ? 'is-fav' : ''}`}
+            onClick={() => toggleFavorite(destination)}
+            title={isDestFavorite ? 'お気に入り解除' : 'お気に入り登録'}
+          >
+            {isDestFavorite ? '★' : '☆'}
+          </button>
           <button
             className={`btn-fav-route ${isRouteFavorite ? 'is-fav' : ''}`}
             onClick={toggleRouteFavorite}
