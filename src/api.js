@@ -552,16 +552,34 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 // StationCodeキャッシュ（セッション中有効）
 const stationCodeCache = new Map();
 
+// StationCorrectionに未登録のバス停のStationCodeを手動定義
+const KNOWN_STATION_CODES = {
+  '国内線旅客ターミナル前': '1602',
+  '旅客ターミナル前': '1602', // 内部名
+};
+
 // バス停名からStationCodeを取得
 async function getStationCode(stationName) {
   if (stationCodeCache.has(stationName)) return stationCodeCache.get(stationName);
 
+  // ハードコード済みStationCodeを優先
+  if (KNOWN_STATION_CODES[stationName]) {
+    const code = KNOWN_STATION_CODES[stationName];
+    stationCodeCache.set(stationName, code);
+    return code;
+  }
+
   // エイリアス解決
-  const queryName = stationName;
   const aliases = STATION_ALIASES[stationName];
   const names = aliases ? [stationName, ...aliases] : [stationName];
 
   for (const name of names) {
+    // エイリアス先もハードコードチェック
+    if (KNOWN_STATION_CODES[name]) {
+      const code = KNOWN_STATION_CODES[name];
+      stationCodeCache.set(stationName, code);
+      return code;
+    }
     try {
       const data = await fetchJSON(`${BASE}/StationCorrection?stationName=${encodeURIComponent(name)}`);
       if (data && data.length > 0) {
