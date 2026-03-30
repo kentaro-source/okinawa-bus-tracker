@@ -16,6 +16,11 @@ function toInternalName(name) {
   if (name === '那覇空港') return '旅客ターミナル前';
   return name;
 }
+// 内部名→表示名の逆変換（正式なバス停名を表示）
+function toDisplayName(name) {
+  if (name === '旅客ターミナル前') return '国内線旅客ターミナル前';
+  return name;
+}
 function googleMapsUrl(stationName) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
 }
@@ -160,9 +165,9 @@ function App() {
       <header className="header">
         <div className="header-route">
           <button className="header-station-btn" onClick={() => setSelectorMode('from')}>
-            <span className="header-from">{station}</span>
+            <span className="header-from">{toDisplayName(station)}</span>
           </button>
-          <a className="btn-map-icon" href={googleMapsUrl(station)} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
+          <a className="btn-map-icon" href={googleMapsUrl(toDisplayName(station))} target="_blank" rel="noopener noreferrer" title="地図で見る">📍</a>
           <button className="header-swap-btn" onClick={() => {
             const newFrom = destination;
             const newTo = station;
@@ -212,7 +217,7 @@ function App() {
         )}
         {!loading && filteredBuses.length === 0 && !error && (
           <div className="empty">
-            現在、{station}→{destination}のバスは見つかりませんでした
+            現在、{toDisplayName(station)}→{destination}のバスは見つかりませんでした
           </div>
         )}
         <BusList buses={filteredBuses} />
