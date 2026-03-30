@@ -88,6 +88,7 @@
 
 ## Git運用
 - ブランチ: `claude/intelligent-mirzakhani`
-- Cloudflare Pagesで自動デプロイ
+- デプロイ: `npx wrangler pages deploy dist --project-name=okinawa-bus --branch=main --commit-dirty=true`
 - PR: https://github.com/kentaro-source/okinawa-bus-tracker/pull/1
 - Git設定: kentaro-source / kentaro@kawagoe-sangyoui.com
+- **重要: 修正後は必ずコミット→push→ビルド→デプロイの順で実行すること（PC間の同期漏れ防止）**
