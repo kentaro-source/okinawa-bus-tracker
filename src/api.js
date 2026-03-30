@@ -372,8 +372,27 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 
         // Only fetch bus locations after confirming route serves both stations
         const buses = await getBusLocation(route.keitouSid, group.Sid);
-        const processed = processBuses(buses, stationName, route, group, direction);
-        results.push(...processed);
+        // 目的地がある場合は目的地到着を基準に表示（出発地通過済みでも除外しない）
+        const targetStation = destinationName || stationName;
+        const processed = processBuses(buses, targetStation, route, group, direction);
+        // 目的地基準の場合、出発地を未通過のバスは除外（逆方向を排除）
+        if (destinationName) {
+          const filtered = processed.filter(bus => {
+            // schedulesから出発地のOrderNoを確認
+            const busData = buses.find(b => b.Bus.Id === bus.busId);
+            if (!busData || !busData.Daiya) return true;
+            const schedules = busData.Daiya.PassedSchedules || [];
+            const depSchedule = schedules.find(s => matchStation(stationName, s.Station.Name));
+            if (!depSchedule) return false;
+            const passages = busData.Passages || [];
+            const depPassed = passages.some(p => p.Station.Name === depSchedule.Station.Name);
+            // 出発地を通過済み（=出発済み）か、未出発のバスを含める
+            return depPassed || passages.length === 0;
+          });
+          results.push(...filtered);
+        } else {
+          results.push(...processed);
+        }
       }
     } catch (e) {
       console.warn(`Route ${route.short} failed:`, e);
