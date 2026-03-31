@@ -102,9 +102,11 @@ function parseTimetableHtml(html) {
 
 // 現在の曜日種別を判定
 function getDayType() {
-  const day = new Date().getDay();
-  if (day === 0) return 'holiday'; // 日曜
-  if (day === 6) return 'saturday';
+  // JST (UTC+9) で曜日判定
+  const now = new Date();
+  const jstDay = new Date(now.getTime() + 9 * 60 * 60 * 1000).getUTCDay();
+  if (jstDay === 0) return 'holiday'; // 日曜
+  if (jstDay === 6) return 'saturday';
   return 'weekday';
   // TODO: 祝日判定
 }
@@ -212,9 +214,10 @@ export async function onRequest(context) {
 const allRoutes = parseTimetableHtml(parsed);
     const dayType = getDayType();
 
-    // 現在時刻以降の出発のみ、今日の曜日種別でフィルタ
+    // 現在時刻以降の出発のみ、今日の曜日種別でフィルタ（JST = UTC+9）
     const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const jstHours = (now.getUTCHours() + 9) % 24;
+    const currentMinutes = jstHours * 60 + now.getUTCMinutes();
     const upcoming = [];
 
     for (const route of allRoutes) {
