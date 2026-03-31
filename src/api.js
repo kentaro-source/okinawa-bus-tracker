@@ -699,9 +699,10 @@ async function getTimetableBuses(stationSid, busStopCode, destinationName) {
     if (!departures || !Array.isArray(departures)) return [];
 
     // 時刻表は終点名しか持たないため目的地フィルタしない（経由地判定不可能）
-    // ユーザーが路線番号と行先を見て判断する
+    // getBusesBetween側で逆方向フィルタ＋目的地フィルタする
+    // 大規模ターミナルでは多路線あるので多めに取得し、フィルタ後に絞る
     return departures
-      .slice(0, 10) // 直近10本まで
+      .slice(0, 50)
       .map(d => {
         const now = new Date();
         const depDate = new Date();
@@ -808,7 +809,11 @@ export async function getBusesBetween(fromStation, toStation) {
     return !rtMins.some(m => Math.abs(m - approachMin) <= 3);
   });
 
-  const merged = [...realtime, ...uniqueApproach];
+  // 時刻表エントリが多すぎないよう、フィルタ後に最大5本に制限
+  const timetableOnly = uniqueApproach.filter(b => b.isTimetable);
+  const approachOnly = uniqueApproach.filter(b => !b.isTimetable);
+  const limitedTimetable = timetableOnly.slice(0, 5);
+  const merged = [...realtime, ...approachOnly, ...limitedTimetable];
 
   return merged
     .filter(r => {
