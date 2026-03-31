@@ -818,7 +818,10 @@ export async function getBusesBetween(fromStation, toStation) {
 
   return merged
     .filter(r => {
-      if (r.etaMinutes !== null && r.etaMinutes <= 0) return false;
+      // 通過済みのバスは除外（ただしETA -2分まで猶予を持たせる）
+      // バス停通過時のPassage更新タイミングで一瞬消えるのを防ぐ
+      if (r.passed) return false;
+      if (r.etaMinutes !== null && r.etaMinutes < -2) return false;
       if (r.notDeparted && r.etaMinutes !== null && r.etaMinutes > 60) return false;
       return true;
     })
