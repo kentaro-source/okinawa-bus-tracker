@@ -347,8 +347,27 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
             (stationSchedule.ScheduledTime.Hour * 60 + stationSchedule.ScheduledTime.Minute) -
             (lastSchedule.ScheduledTime.Hour * 60 + lastSchedule.ScheduledTime.Minute);
 
-          // ETA = last actual arrival + remaining travel time - now
-          const estimatedArrival = new Date(actualArrival.getTime() + remainingScheduledMinutes * 60000);
+          // 遅延率を残り区間にも適用（遅延中のバスは残りも遅れる傾向）
+          // 実績ベースの遅延率: 直近2停留所間の実測/定刻の比率
+          let delayRatio = 1.0;
+          if (passages.length >= 2 && delayMinutes > 0) {
+            const prevPassage = passages[passages.length - 2];
+            const prevArrival = parseNetDate(prevPassage.ArrivalTime);
+            const prevSchedule = prevPassage.Schedule;
+            if (prevArrival && prevSchedule) {
+              const actualSegment = (actualArrival - prevArrival) / 60000;
+              const schedSegment =
+                (lastSchedule.ScheduledTime.Hour * 60 + lastSchedule.ScheduledTime.Minute) -
+                (prevSchedule.ScheduledTime.Hour * 60 + prevSchedule.ScheduledTime.Minute);
+              if (schedSegment > 0 && actualSegment > 0) {
+                delayRatio = Math.min(2.0, Math.max(1.0, actualSegment / schedSegment));
+              }
+            }
+          }
+
+          // ETA = last actual arrival + remaining travel time × delay ratio - now
+          const adjustedRemaining = remainingScheduledMinutes * delayRatio;
+          const estimatedArrival = new Date(actualArrival.getTime() + adjustedRemaining * 60000);
           etaMinutes = Math.round((estimatedArrival - now) / 60000);
         } else {
           // At origin or no valid data: use scheduled time (no delay shown)
