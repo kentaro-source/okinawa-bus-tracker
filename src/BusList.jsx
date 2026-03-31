@@ -65,7 +65,7 @@ function BusCard({ bus }) {
         </div>
         {bus.isTimetable ? (
           <div className="bus-position not-departed">
-            🕐 {bus.scheduledTime}発（時刻表）
+            🕐 {bus.scheduledTime}発
           </div>
         ) : bus.notDeparted ? (
           <div className="bus-position not-departed">
@@ -98,8 +98,7 @@ export default function BusList({ buses }) {
   if (!buses || buses.length === 0) return null;
 
   const running = buses.filter(b => !b.notDeparted && !b.isTimetable);
-  const notDeparted = buses.filter(b => b.notDeparted && !b.isTimetable);
-  const timetable = buses.filter(b => b.isTimetable);
+  const waiting = buses.filter(b => b.notDeparted || b.isTimetable);
 
   return (
     <div className="bus-list">
@@ -111,19 +110,11 @@ export default function BusList({ buses }) {
           ))}
         </div>
       )}
-      {notDeparted.length > 0 && (
+      {waiting.length > 0 && (
         <div className="bus-group">
           <div className="bus-group-header">🕐 まもなく出発</div>
-          {notDeparted.map((bus) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
-          ))}
-        </div>
-      )}
-      {timetable.length > 0 && (
-        <div className="bus-group">
-          <div className="bus-group-header">📋 時刻表</div>
-          {timetable.map((bus) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}`} bus={bus} />
+          {waiting.map((bus) => (
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} />
           ))}
         </div>
       )}
