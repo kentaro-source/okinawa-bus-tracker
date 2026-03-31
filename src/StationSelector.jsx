@@ -109,96 +109,74 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       const stationSet = new Map();
 
       const allRoutes = await fetchAllRoutes();
-      const failedRoutes = [];
       let finalFailedCount = 0;
-      const tasks = allRoutes.map((route) => async () => {
-        try {
-          const groups = await getCoursesGroup(route.keitouSid);
-          for (const group of groups) {
-            const stations = await getStations(route.keitouSid, group.Sid);
-            for (const s of stations) {
-              // 括弧・乗り場番号を除去してバス停名を正規化
-              const cleanName = s.Name
-                .replace(/（.*?）/g, '').replace(/\(.*?\)/g, '')
-                .replace(/[\s　]+(おりば|のりば|乗り場|乗場)[\s　]*\S*/g, '')
-                .replace(/[\s　]+[A-Za-z0-9０-９]+$/g, '')
-                .trim();
-              if (!stationSet.has(cleanName)) {
-                stationSet.set(cleanName, {
-                  name: cleanName,
-                  fullName: s.Name,
-                  yomigana: s.Yomigana || '',
-                  lat: s.Position?.Latitude || null,
-                  lng: s.Position?.Longitude || null,
-                  routes: [route.short],
-                });
-              } else {
-                const existing = stationSet.get(cleanName);
-                if (!existing.routes.includes(route.short)) {
-                  existing.routes.push(route.short);
-                }
-                if (!existing.lat && s.Position?.Latitude) {
-                  existing.lat = s.Position.Latitude;
-                  existing.lng = s.Position.Longitude;
-                }
-                if (!existing.yomigana && s.Yomigana) {
-                  existing.yomigana = s.Yomigana;
-                }
+
+      // 路線スキャン処理（共通）
+      const scanRoute = async (route) => {
+        const groups = await getCoursesGroup(route.keitouSid);
+        for (const group of groups) {
+          const stations = await getStations(route.keitouSid, group.Sid);
+          for (const s of stations) {
+            const cleanName = s.Name
+              .replace(/（.*?）/g, '').replace(/\(.*?\)/g, '')
+              .replace(/[\s　]+(おりば|のりば|乗り場|乗場)[\s　]*\S*/g, '')
+              .replace(/[\s　]+[A-Za-z0-9０-９]+$/g, '')
+              .trim();
+            if (!stationSet.has(cleanName)) {
+              stationSet.set(cleanName, {
+                name: cleanName,
+                fullName: s.Name,
+                yomigana: s.Yomigana || '',
+                lat: s.Position?.Latitude || null,
+                lng: s.Position?.Longitude || null,
+                routes: [route.short],
+              });
+            } else {
+              const existing = stationSet.get(cleanName);
+              if (!existing.routes.includes(route.short)) {
+                existing.routes.push(route.short);
+              }
+              if (!existing.lat && s.Position?.Latitude) {
+                existing.lat = s.Position.Latitude;
+                existing.lng = s.Position.Longitude;
+              }
+              if (!existing.yomigana && s.Yomigana) {
+                existing.yomigana = s.Yomigana;
               }
             }
           }
+        }
+      };
+
+      // 初回スキャン（5並列）
+      let failedRoutes = [];
+      const tasks = allRoutes.map((route) => async () => {
+        try {
+          await scanRoute(route);
         } catch (e) {
-          console.warn(`Route ${route.short} station scan failed:`, e);
+          console.warn(`Route ${route.short} scan failed:`, e);
           failedRoutes.push(route);
         }
       });
-
       await runWithConcurrency(tasks, 5);
 
-      // 失敗した路線をリトライ（1回）
-      if (failedRoutes.length > 0) {
-        console.log(`Retrying ${failedRoutes.length} failed routes...`);
+      // 失敗した路線をリトライ（最大3回、並列数を下げて安定化）
+      for (let retry = 1; retry <= 3 && failedRoutes.length > 0; retry++) {
+        console.log(`Retry ${retry}: ${failedRoutes.length} failed routes...`);
         const stillFailed = [];
         const retryTasks = failedRoutes.map((route) => async () => {
           try {
-            const groups = await getCoursesGroup(route.keitouSid);
-            for (const group of groups) {
-              const stations = await getStations(route.keitouSid, group.Sid);
-              for (const s of stations) {
-                const cleanName = s.Name
-                  .replace(/（.*?）/g, '').replace(/\(.*?\)/g, '')
-                  .replace(/[\s　]+(おりば|のりば|乗り場|乗場)[\s　]*\S*/g, '')
-                  .replace(/[\s　]+[A-Za-z0-9０-９]+$/g, '')
-                  .trim();
-                if (!stationSet.has(cleanName)) {
-                  stationSet.set(cleanName, {
-                    name: cleanName,
-                    fullName: s.Name,
-                    lat: s.Position?.Latitude || null,
-                    lng: s.Position?.Longitude || null,
-                    routes: [route.short],
-                  });
-                } else {
-                  const existing = stationSet.get(cleanName);
-                  if (!existing.routes.includes(route.short)) {
-                    existing.routes.push(route.short);
-                  }
-                  if (!existing.lat && s.Position?.Latitude) {
-                    existing.lat = s.Position.Latitude;
-                    existing.lng = s.Position.Longitude;
-                  }
-                }
-              }
-            }
+            await scanRoute(route);
           } catch {
             stillFailed.push(route);
           }
         });
-        await runWithConcurrency(retryTasks, 3);
-        finalFailedCount = stillFailed.length;
-        if (finalFailedCount > 0) {
-          console.warn(`${finalFailedCount} routes still failed after retry:`, stillFailed.map(r => r.short));
-        }
+        await runWithConcurrency(retryTasks, 2);
+        failedRoutes = stillFailed;
+      }
+      finalFailedCount = failedRoutes.length;
+      if (finalFailedCount > 0) {
+        console.warn(`${finalFailedCount} routes still failed after retries:`, failedRoutes.map(r => r.short));
       }
 
       const result = Array.from(stationSet.values()).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
