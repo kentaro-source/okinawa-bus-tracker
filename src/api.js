@@ -776,17 +776,18 @@ export async function getBusesBetween(fromStation, toStation) {
     getApproachBuses(fromStation, toStation),
   ]);
 
-  // 接近情報を目的地で二重フィルタ（getApproachBuses内でも、ここでも）
+  // 接近情報を方向＋目的地でフィルタ
   const destRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
-  const filteredApproach = toStation
-    ? approach.filter(b => {
-        // 時刻表由来は目的地フィルタしない（終点名しかなく経由地判定不可能）
-        if (b.isTimetable) return true;
-        if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-        if (destRoutes && destRoutes.includes(b.routeShort)) return true;
-        return false;
-      })
-    : approach;
+  const filteredApproach = approach.filter(b => {
+    // 逆方向フィルタ: 行先が出発地と同じ＝出発地に到着するバス＝逆方向
+    if (fromStation && b.destination && matchStation(fromStation, b.destination)) return false;
+    // 目的地フィルタ
+    if (!toStation) return true;
+    if (b.isTimetable) return true; // 時刻表由来は目的地フィルタしない（終点名しかなく経由地判定不可能）
+    if (filterByDestination(b.destination, b.routeName, toStation)) return true;
+    if (destRoutes && destRoutes.includes(b.routeShort)) return true;
+    return false;
+  });
 
   // 重複排除: 同じ路線番号＋近い定刻（±3分）のバスはリアルタイム側を優先
   // 接近情報とBusLocationで定刻が1-2分ずれることがあるため、完全一致ではなく近似マッチ
