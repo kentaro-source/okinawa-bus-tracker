@@ -34,13 +34,16 @@ function loadStationCache() {
     // Clean up old cache format
     localStorage.removeItem(OLD_CACHE_KEY);
     const cached = JSON.parse(localStorage.getItem(STATION_CACHE_KEY));
-    if (cached && cached.ts > Date.now() - 86400000) return cached.data;
+    if (!cached) return null;
+    // 失敗路線が多かった場合はTTLを1時間に短縮（通常24時間）
+    const ttl = cached.failedCount > 3 ? 3600000 : 86400000;
+    if (cached.ts > Date.now() - ttl) return cached.data;
   } catch {}
   return null;
 }
 
-function saveStationCache(data) {
-  localStorage.setItem(STATION_CACHE_KEY, JSON.stringify({ ts: Date.now(), data }));
+function saveStationCache(data, failedCount = 0) {
+  localStorage.setItem(STATION_CACHE_KEY, JSON.stringify({ ts: Date.now(), data, failedCount }));
 }
 
 // ひらがな→カタカナ変換
@@ -107,6 +110,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
 
       const allRoutes = await fetchAllRoutes();
       const failedRoutes = [];
+      let finalFailedCount = 0;
       const tasks = allRoutes.map((route) => async () => {
         try {
           const groups = await getCoursesGroup(route.keitouSid);
@@ -154,6 +158,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       // 失敗した路線をリトライ（1回）
       if (failedRoutes.length > 0) {
         console.log(`Retrying ${failedRoutes.length} failed routes...`);
+        const stillFailed = [];
         const retryTasks = failedRoutes.map((route) => async () => {
           try {
             const groups = await getCoursesGroup(route.keitouSid);
@@ -185,14 +190,20 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 }
               }
             }
-          } catch {}
+          } catch {
+            stillFailed.push(route);
+          }
         });
         await runWithConcurrency(retryTasks, 3);
+        finalFailedCount = stillFailed.length;
+        if (finalFailedCount > 0) {
+          console.warn(`${finalFailedCount} routes still failed after retry:`, stillFailed.map(r => r.short));
+        }
       }
 
       const result = Array.from(stationSet.values()).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
       setAllStations(result);
-      saveStationCache(result);
+      saveStationCache(result, finalFailedCount);
       setLoading(false);
     }
 
