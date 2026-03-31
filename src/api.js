@@ -766,9 +766,14 @@ export async function getBusesBetween(fromStation, toStation) {
   const allRoutes = await fetchAllRoutes();
 
   // Use cached station data to narrow down routes (avoids hundreds of API calls)
-  const knownRoutes = getCachedRoutesForStation(fromStation);
+  // 出発地＋目的地両方のキャッシュを使用（片方だけ失敗したケースをカバー）
+  const fromRoutes = getCachedRoutesForStation(fromStation);
+  const toRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
+  const knownRoutes = (fromRoutes || toRoutes)
+    ? new Set([...(fromRoutes || []), ...(toRoutes || [])])
+    : null;
   const routes = knownRoutes
-    ? allRoutes.filter(r => knownRoutes.includes(r.short))
+    ? allRoutes.filter(r => knownRoutes.has(r.short))
     : allRoutes;
 
   // リアルタイムデータと接近情報を並列取得
