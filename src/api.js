@@ -288,7 +288,7 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         notDeparted: false,
         destination: getBaseName(allStations[allStations.length - 1]?.Name) || group.YukisakiName || '',
         speed: bus.Speed,
-        currentStop,
+        currentStop: (lastPassageOrder == null || lastPassageOrder > 2) ? currentStop : null,
         stopsAway,
         viaStops,
         isHolidayVariant: true,
@@ -382,8 +382,11 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         if (stopsAway < 0) continue;
       }
 
-      // 現在位置は常に表示（始発付近でも位置自体は有効）
-      currentStop = lastPassage.Station.ShortName || lastPassage.Station.Name.replace(/（.*?）$/, '');
+      // 始発付近（OrderNo ≤ 2）はPassageが出発時の記録のまま更新されないため位置非表示
+      // （例: 空港出発の120番が那覇BT手前でも「国際線旅客ターミナル前」と表示される問題）
+      if (lastPassageOrder == null || lastPassageOrder > 2) {
+        currentStop = lastPassage.Station.ShortName || lastPassage.Station.Name.replace(/（.*?）$/, '');
+      }
     }
 
     // Determine if bus has not departed yet (no passage data)
