@@ -25,15 +25,22 @@ function getBaseName(name) {
   return name.replace(/（.*?）/g, '').replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim();
 }
 
+// 前方一致の除外サフィックス（別のバス停を示す接尾語）
+const EXCLUDED_SUFFIXES = ['通り', '入口', '団地', '小学校', '中学校', '高校', '公園'];
+
 // バス停マッチング: 括弧内を除外し、エイリアスも考慮
 function matchStation(stationName, targetName) {
   const base = getBaseName(targetName);
   // 完全一致
   if (base === stationName) return true;
-  // 前方一致（通り除外）
-  if (base.startsWith(stationName) && !base.slice(stationName.length).startsWith('通り')) return true;
-  // 部分一致（baseのみ）
-  if (base.includes(stationName)) return true;
+  // 前方一致（別バス停を示すサフィックスは除外）
+  if (base.startsWith(stationName)) {
+    const rest = base.slice(stationName.length);
+    if (rest === '' || rest.startsWith(' ') || rest.startsWith('　')) return true;
+    if (!EXCLUDED_SUFFIXES.some(s => rest.startsWith(s))) return true;
+  }
+  // 後方一致（例: 国内線旅客ターミナル前 → 旅客ターミナル前）
+  if (base.endsWith(stationName)) return true;
   // エイリアスチェック
   const aliases = STATION_ALIASES[stationName];
   if (aliases) {
