@@ -788,11 +788,24 @@ export async function getBusesBetween(fromStation, toStation) {
       })
     : approach;
 
-  // 重複排除: 同じ路線番号＋定刻のバスはリアルタイム側を優先
-  const realtimeKeys = new Set(realtime.map(b =>
-    `${b.routeShort}-${String(b.scheduledHour).padStart(2,'0')}:${String(b.scheduledMinute).padStart(2,'0')}`
-  ));
-  const uniqueApproach = filteredApproach.filter(b => !realtimeKeys.has(`${b.routeShort}-${b.scheduledTime}`));
+  // 重複排除: 同じ路線番号＋近い定刻（±3分）のバスはリアルタイム側を優先
+  // 接近情報とBusLocationで定刻が1-2分ずれることがあるため、完全一致ではなく近似マッチ
+  const realtimeByRoute = {};
+  for (const b of realtime) {
+    const min = b.scheduledHour * 60 + b.scheduledMinute;
+    if (!realtimeByRoute[b.routeShort]) realtimeByRoute[b.routeShort] = [];
+    realtimeByRoute[b.routeShort].push(min);
+  }
+  const uniqueApproach = filteredApproach.filter(b => {
+    if (!b.scheduledTime) return true;
+    const parts = b.scheduledTime.match(/^(\d+):(\d+)$/);
+    if (!parts) return true;
+    const approachMin = parseInt(parts[1]) * 60 + parseInt(parts[2]);
+    const rtMins = realtimeByRoute[b.routeShort];
+    if (!rtMins) return true;
+    // リアルタイム側に±3分以内の同路線バスがあればスキップ（リアルタイム側を優先）
+    return !rtMins.some(m => Math.abs(m - approachMin) <= 3);
+  });
 
   const merged = [...realtime, ...uniqueApproach];
 
