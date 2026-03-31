@@ -454,13 +454,13 @@ body {
   background: rgba(0, 0, 0, 0.7);
   z-index: 100;
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: center;
 }
 
 .modal {
   background: var(--bg2);
-  border-radius: var(--radius) var(--radius) 0 0;
+  border-radius: 0 0 var(--radius) var(--radius);
   width: 100%;
   max-width: 480px;
   max-height: 85dvh;
