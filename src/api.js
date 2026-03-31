@@ -288,7 +288,7 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         notDeparted: false,
         destination: getBaseName(allStations[allStations.length - 1]?.Name) || group.YukisakiName || '',
         speed: bus.Speed,
-        currentStop: (lastPassageOrder == null || lastPassageOrder > 2) ? currentStop : null,
+        currentStop,
         stopsAway,
         viaStops,
         isHolidayVariant: true,
@@ -382,10 +382,8 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         if (stopsAway < 0) continue;
       }
 
-      // Skip unreliable position data near origin (OrderNo ≤ 2)
-      if (lastPassageOrder == null || lastPassageOrder > 2) {
-        currentStop = lastPassage.Station.ShortName || lastPassage.Station.Name.replace(/（.*?）$/, '');
-      }
+      // 現在位置は常に表示（始発付近でも位置自体は有効）
+      currentStop = lastPassage.Station.ShortName || lastPassage.Station.Name.replace(/（.*?）$/, '');
     }
 
     // Determine if bus has not departed yet (no passage data)
