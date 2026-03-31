@@ -67,16 +67,27 @@ function App() {
   const [routeFavorites, setRouteFavorites] = useState(loadRouteFavorites);
   const intervalRef = useRef(null);
 
+  const prevBusesRef = useRef([]);
   const fetchBuses = useCallback(async (from, to) => {
     try {
       setError(null);
       if (from === to) {
         setBuses([]);
+        prevBusesRef.current = [];
         setLastUpdate(new Date());
         return;
       }
       const data = await getBusesBetween(from, to);
-      setBuses(data);
+
+      // 前回表示されていたバスが今回消えた場合、1サイクル維持（瞬断防止）
+      const newKeys = new Set(data.map(b => b.busId));
+      const retained = prevBusesRef.current.filter(b =>
+        !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && !b._retained
+      ).map(b => ({ ...b, _retained: true }));
+
+      const merged = [...data, ...retained];
+      setBuses(merged);
+      prevBusesRef.current = merged;
       setLastUpdate(new Date());
     } catch (e) {
       setError(e.message);
