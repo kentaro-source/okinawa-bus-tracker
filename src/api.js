@@ -626,19 +626,16 @@ async function getApproachBuses(stationName, destinationName) {
     // 接近情報があればフォーマット
     const formatted = buses.length > 0 ? formatApproachBuses(buses, destinationName) : [];
 
-    // 時刻表も常に取得してマージ（接近情報は目的地フィルタで減るため）
-    if (stationSid) {
+    // 接近情報が少ない場合（始発停等）のみ時刻表を補完
+    if (formatted.length < 3 && stationSid) {
       const busStopCode = stationCode + '0000';
       const timetable = await getTimetableBuses(stationSid, busStopCode, destinationName);
-      // 重複排除: 同じ路線番号＋定刻は接近情報側を優先
       const approachKeys = new Set(formatted.map(b => `${b.routeShort}-${b.scheduledTime}`));
       const uniqueTimetable = timetable.filter(b => !approachKeys.has(`${b.routeShort}-${b.scheduledTime}`));
       return [...formatted, ...uniqueTimetable];
     }
 
     return formatted;
-
-    return [];
   } catch (e) {
     console.warn('Approach/Timetable API failed:', e);
     return [];
