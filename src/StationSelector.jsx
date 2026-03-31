@@ -82,6 +82,12 @@ const READING_ALIASES = {
   'ぎのざ': '宜野座',
   'きん': '金武',
   'おんな': '恩納',
+  'やふそ': '屋富祖',
+  'とまり': '泊',
+  'あさひばし': '旭橋',
+  'くもじ': '久茂地',
+  'けんちょう': '県庁',
+  'こくさい': '国際',
 };
 
 export default function StationSelector({ onSelect, onClose, favorites, onToggleFavorite, title = 'バス停を選択', showAirportShortcut, onSelectAirport }) {

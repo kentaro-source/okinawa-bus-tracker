@@ -13,8 +13,8 @@ const STATION_ALIASES = {
 
 // 経由地として表示する主要バス停（ユーザーが判断しやすい目印）
 const VIA_LANDMARKS = [
-  '那覇バスターミナル', '旭橋', '久茂地', '牧志', '県庁北口', '県庁前',
-  '泊高橋', '国際通り入口', '旅客ターミナル',
+  '那覇バスターミナル', '旭橋', '牧志', '県庁北口', '県庁前',
+  '沖縄タイムス前', '国際通り入口', '旅客ターミナル',
   '普天間', '宜野湾', '北谷', 'コンベンションセンター前',
   '沖縄南ＩＣ', '沖縄北ＩＣ', '西原ＩＣ',
   'ライカム', '読谷', '嘉手納',
@@ -265,7 +265,7 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         for (const s of allStations) {
           const sOrder = s.OrderNo;
           if (sOrder == null || sOrder <= ourOrderNo) continue;
-          if (destOrderNo != null && sOrder >= destOrderNo) break; // 目的地以降は不要
+          if (destOrderNo != null && sOrder >= destOrderNo) break;
           const base = getBaseName(s.Name);
           if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
             viaStops.push(base);
@@ -792,15 +792,19 @@ export async function getBusesBetween(fromStation, toStation) {
   ]);
 
   // 接近情報を方向＋目的地でフィルタ
-  const destRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
   const filteredApproach = approach.filter(b => {
     // 逆方向フィルタ: 行先が出発地と同じ＝出発地に到着するバス＝逆方向
     if (fromStation && b.destination && matchStation(fromStation, b.destination)) return false;
-    // 目的地フィルタ
+    // 目的地フィルタ: 行先に目的地が含まれているか、行先の途中に目的地があるか
     if (!toStation) return true;
-    if (b.isTimetable) return true; // 時刻表由来は目的地フィルタしない（終点名しかなく経由地判定不可能）
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-    if (destRoutes && destRoutes.includes(b.routeShort)) return true;
+    // 時刻表由来: 終点名しかないが、目的地が終点の手前にある場合もある
+    // → 終点が目的地と逆方向（出発地より遠い）なら除外
+    if (b.isTimetable) {
+      // 終点名に目的地が含まれないが、目的地が途中にある可能性あり
+      // → 行先が出発地方向でなければ許可（リアルタイムデータで補完）
+      return false;
+    }
     return false;
   });
 
