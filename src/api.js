@@ -11,6 +11,13 @@ const STATION_ALIASES = {
   '那覇バスターミナル': ['旭橋', 'バスターミナル前'],
 };
 
+// 逆引き: API上の正式名 → 内部統一名（エイリアス検索で使用）
+const STATION_REVERSE_ALIASES = {
+  '国内線旅客ターミナル前': '那覇空港',
+  '国際線旅客ターミナル前': '那覇空港',
+  '旅客ターミナル前': '那覇空港',
+};
+
 // 経由地として表示する主要バス停（ユーザーが判断しやすい目印）
 const VIA_LANDMARKS = [
   '那覇バスターミナル', '旭橋', '牧志', '県庁北口', '県庁前',
@@ -491,12 +498,29 @@ function getCachedRoutesForStation(stationName) {
 
       // Alias match (e.g. 那覇空港 → 旅客ターミナル前)
       if (routes.size === 0) {
+        // 正引き: ユーザー名→API名
         const aliases = STATION_ALIASES[stationName];
         if (aliases) {
           for (const alias of aliases) {
             for (const s of cached.data) {
               if (s.name.includes(alias)) {
                 s.routes.forEach(r => routes.add(r));
+              }
+            }
+          }
+        }
+        // 逆引き: API名→ユーザー名→API名（例: 国内線旅客ターミナル前→那覇空港→旅客ターミナル前）
+        if (routes.size === 0) {
+          const normalized = STATION_REVERSE_ALIASES[stationName];
+          if (normalized) {
+            const normAliases = STATION_ALIASES[normalized];
+            if (normAliases) {
+              for (const alias of normAliases) {
+                for (const s of cached.data) {
+                  if (s.name.includes(alias)) {
+                    s.routes.forEach(r => routes.add(r));
+                  }
+                }
               }
             }
           }
@@ -730,7 +754,7 @@ async function getTimetableBuses(stationSid, busStopCode, destinationName) {
           scheduledTime: d.scheduledTime,
           scheduledHour: d.hour,
           scheduledMinute: d.minute,
-          etaMinutes: Math.max(0, etaMinutes),
+          etaMinutes,
           delayMinutes: 0,
           passed: false,
           notDeparted: true,
@@ -798,11 +822,11 @@ export async function getBusesBetween(fromStation, toStation) {
     // 目的地フィルタ: 行先に目的地が含まれているか、行先の途中に目的地があるか
     if (!toStation) return true;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-    // 時刻表由来: 終点名しかないが、目的地が終点の手前にある場合もある
-    // → 終点が目的地と逆方向（出発地より遠い）なら除外
+    // 時刻表由来: 終点名に目的地が含まれないが、目的地が途中にある可能性あり
+    // → キャッシュで路線が目的地を通るか確認
     if (b.isTimetable) {
-      // 終点名に目的地が含まれないが、目的地が途中にある可能性あり
-      // → 行先が出発地方向でなければ許可（リアルタイムデータで補完）
+      const destRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
+      if (destRoutes && destRoutes.includes(b.routeShort)) return true;
       return false;
     }
     return false;
