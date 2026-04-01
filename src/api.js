@@ -861,8 +861,9 @@ export async function getBusesBetween(fromStation, toStation) {
     .filter(r => {
       // 通過済みのバスは除外
       if (r.passed) return false;
-      // stopsAway > 0 = まだ手前にいる → ETAがマイナスでも消さない
-      // （バス停間移動中にPassage未更新でETAだけ減る問題への対策）
+      // 時刻表データは定刻過ぎたら即消す（瞬断の心配なし）
+      if (r.isTimetable && r.etaMinutes !== null && r.etaMinutes < 0) return false;
+      // 走行中バスは2分バッファ（バス停間移動中の瞬断防止）
       if (r.stopsAway != null && r.stopsAway > 0) { /* 手前にいるので残す */ }
       else if (r.etaMinutes !== null && r.etaMinutes < -2) return false;
       if (r.notDeparted && r.etaMinutes !== null && r.etaMinutes > 60) return false;
