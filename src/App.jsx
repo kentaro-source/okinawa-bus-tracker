@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { getBusesBetween } from './api'
 import BusList from './BusList'
 import StationSelector from './StationSelector'
@@ -63,6 +63,7 @@ function App() {
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [selectorMode, setSelectorMode] = useState(null); // null | 'from' | 'to'
+  const [showInfo, setShowInfo] = useState(false);
   const [favorites, setFavorites] = useState(loadFavorites);
   const [routeFavorites, setRouteFavorites] = useState(loadRouteFavorites);
   const intervalRef = useRef(null);
@@ -215,12 +216,26 @@ function App() {
         {lastUpdate && (
           <div className="header-update">
             最終更新: {lastUpdate.toLocaleTimeString('ja-JP')}
-            <button className="btn-refresh" onClick={() => fetchBuses(station, destination)} disabled={loading}>
-              {loading ? '...' : '↻'}
-            </button>
+            <button className="btn-info" onClick={() => setShowInfo(true)} title="このアプリについて">？</button>
           </div>
         )}
       </header>
+
+      {showInfo && (
+        <div className="modal-overlay" onClick={() => setShowInfo(false)}>
+          <div className="modal-content info-modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>このアプリについて</h2>
+              <button className="modal-close" onClick={() => setShowInfo(false)}>✕</button>
+            </div>
+            <div className="info-body">
+              <p>「あと○分」の到着予測は、各バスの直近の通過記録と時刻表の定刻をもとに算出しています。</p>
+              <p>道路状況等により実際の到着時刻とは異なる場合があります。同じバス停にいるバスでも、遅延状況が異なれば予測時間に差が出ます。</p>
+              <p className="info-sub">データ: busnavi-okinawa.com / 45秒間隔で自動更新</p>
+            </div>
+          </div>
+        </div>
+      )}
 
 
       <main className="main">
@@ -264,9 +279,14 @@ function App() {
               </button>
             ))}
           </div>
-          <button className="btn-action" onClick={() => setSelectorMode('from')}>
-            バス停検索
-          </button>
+          <div className="footer-buttons">
+            <button className="btn-action" onClick={() => setSelectorMode('from')}>
+              バス停検索
+            </button>
+            <a className="btn-action btn-gmaps" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">
+              Google Maps
+            </a>
+          </div>
         </div>
       </footer>
 

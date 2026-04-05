@@ -57,8 +57,8 @@ function BusCard({ bus }) {
         </div>
         <div className="bus-eta">
           <span className="eta-time">{formatETA(bus.etaMinutes)}</span>
-          {bus.delayMinutes !== 0 && !bus.notDeparted && bus.stopsAway != null && bus.stopsAway <= 10 && (
-            <span className={`eta-delay ${bus.delayMinutes > 0 ? 'late' : 'early'}`}>
+          {bus.delayMinutes > 0 && !bus.notDeparted && bus.stopsAway != null && bus.stopsAway <= 15 && (
+            <span className="eta-delay late">
               ({formatDelay(bus.delayMinutes)})
             </span>
           )}

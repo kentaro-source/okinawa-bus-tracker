@@ -27,6 +27,11 @@ const VIA_LANDMARKS = [
   'ライカム', '読谷', '嘉手納',
 ];
 
+// 経由地の表示名変換（わかりやすさ優先）
+const VIA_DISPLAY_NAMES = {
+  '牧志': '国際通り',
+};
+
 // 括弧内の方向表記を除外してバス停名の本体だけ取得
 function getBaseName(name) {
   return name.replace(/（.*?）/g, '').replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim();
@@ -274,8 +279,11 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
           if (sOrder == null || sOrder <= ourOrderNo) continue;
           if (destOrderNo != null && sOrder >= destOrderNo) break;
           const base = getBaseName(s.Name);
-          if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
-            viaStops.push(base);
+          if (VIA_LANDMARKS.some(v => base.includes(v))) {
+            const displayName = VIA_DISPLAY_NAMES[base] || base;
+            if (!viaStops.includes(displayName)) {
+              viaStops.push(displayName);
+            }
           }
           if (viaStops.length >= 3) break;
         }

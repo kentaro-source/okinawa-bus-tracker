@@ -188,6 +188,40 @@ body {
   font-size: 14px;
 }
 
+.btn-info {
+  background: none;
+  border: 1px solid var(--bg3);
+  color: var(--text2);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.info-modal {
+  max-width: 360px;
+}
+
+.info-body {
+  padding: 16px;
+  line-height: 1.6;
+}
+
+.info-body p {
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.info-sub {
+  font-size: 12px !important;
+  color: var(--text2) !important;
+  border-top: 1px solid var(--bg3);
+  padding-top: 12px;
+}
+
 /* Main */
 .main {
   flex: 1;
@@ -436,6 +470,11 @@ body {
   font-weight: 600;
 }
 
+.footer-buttons {
+  display: flex;
+  gap: 8px;
+}
+
 .btn-action {
   background: var(--bg3);
   color: var(--text);
@@ -444,7 +483,9 @@ body {
   border-radius: 8px;
   font-size: 14px;
   cursor: pointer;
-  width: 100%;
+  flex: 1;
+  text-align: center;
+  text-decoration: none;
 }
 
 /* Modal */
