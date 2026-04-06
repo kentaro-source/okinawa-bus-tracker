@@ -34,7 +34,9 @@ const VIA_DISPLAY_NAMES = {
 
 // 括弧内の方向表記を除外してバス停名の本体だけ取得
 function getBaseName(name) {
-  return name.replace(/（.*?）/g, '').replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim();
+  return name.replace(/（.*?）/g, '').replace(/\(.*?\)/g, '')
+    .replace(/[\s　]+(おりば|のりば|乗り場|乗場)[\s　]*\S*/g, '')
+    .replace(/\s+/g, ' ').trim();
 }
 
 // 前方一致の除外サフィックス（別のバス停を示す接尾語）
