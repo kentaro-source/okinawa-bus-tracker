@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { fetchAllRoutes, getCoursesGroup, getStations, runWithConcurrency } from './api'
+import { ALL_OTHER_STOPS } from './otherBuses'
 
 const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
 const OLD_CACHE_KEY = 'bus-tracker-station-cache';
@@ -102,11 +103,31 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
     inputRef.current?.focus();
   }, []);
 
+  // 他社バス停をallStationsにマージ（重複はスキップ）
+  function mergeOtherStops(stations) {
+    const nameSet = new Set(stations.map(s => s.name));
+    const merged = [...stations];
+    for (const [name, info] of ALL_OTHER_STOPS) {
+      if (!nameSet.has(name)) {
+        merged.push({
+          name,
+          fullName: name,
+          yomigana: '',
+          lat: null,
+          lng: null,
+          routes: Array.from(info.companies),
+          isOtherBus: true,
+        });
+      }
+    }
+    return merged;
+  }
+
   // Load all station names from cache or API
   useEffect(() => {
     const cached = loadStationCache();
     if (cached) {
-      setAllStations(cached);
+      setAllStations(mergeOtherStops(cached));
       return;
     }
 
@@ -186,7 +207,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       }
 
       const result = Array.from(stationSet.values()).sort((a, b) => a.name.localeCompare(b.name, 'ja'));
-      setAllStations(result);
+      setAllStations(mergeOtherStops(result));
       saveStationCache(result, finalFailedCount);
       setLoading(false);
     }
@@ -373,7 +394,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                   <div key={s.name} className="station-item">
                     <button className="station-btn" onClick={() => onSelect(s.name)}>
                       <span className="station-name">{s.name}</span>
-                      <span className="station-routes">{s.routes.map(r => r + '番').join(' ')}</span>
+                      <span className="station-routes">{s.isOtherBus ? s.routes.join(' ') : s.routes.map(r => r + '番').join(' ')}</span>
                     </button>
                     <button
                       className={`btn-fav-small ${favorites.includes(s.name) ? 'is-fav' : ''}`}
