@@ -80,13 +80,18 @@ function App() {
       }
       const data = await getBusesBetween(from, to);
 
-      // 前回表示されていたバスが今回消えた場合、1サイクル維持（瞬断防止）
+      // 前回表示されていたバスが今回消えた場合、最大2サイクル（90秒）維持（瞬断防止）
       const newKeys = new Set(data.map(b => b.busId));
       const retained = prevBusesRef.current.filter(b =>
-        !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && !b._retained
-      ).map(b => ({ ...b, _retained: true }));
+        !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && (b._retainCount || 0) < 2
+      ).map(b => ({ ...b, _retainCount: (b._retainCount || 0) + 1 }));
 
-      const merged = [...data, ...retained];
+      const merged = [...data, ...retained].sort((a, b) => {
+        if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
+        if (a.etaMinutes === null) return 1;
+        if (b.etaMinutes === null) return -1;
+        return a.etaMinutes - b.etaMinutes;
+      });
       setBuses(merged);
       prevBusesRef.current = merged;
       setLastUpdate(new Date());
