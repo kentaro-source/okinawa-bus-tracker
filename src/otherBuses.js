@@ -101,32 +101,39 @@ const ALL_OTHER_STOPS = (() => {
 })();
 
 // 出発地→目的地間のバスを検索（他社バス）
-// 両方のバス停を含む路線を返す（順序チェックあり）
+// 両方のバス停を含む路線を返す（往復両方向チェック）
 export function getOtherBusesBetween(fromStation, toStation) {
   const results = [];
+  const seen = new Set(); // 同じ路線IDの重複防止
 
   for (const route of ALL_OTHER_ROUTES) {
-    const fromIdx = route.stops.findIndex(s => stationMatch(fromStation, s));
-    const toIdx = toStation ? route.stops.findIndex(s => stationMatch(toStation, s)) : -1;
+    if (seen.has(route.id)) continue;
 
-    // 出発地がこの路線にない場合スキップ
-    if (fromIdx === -1) continue;
+    // 順方向・逆方向の両方をチェック
+    const directions = [route.stops, [...route.stops].reverse()];
+    for (const stops of directions) {
+      const fromIdx = stops.findIndex(s => stationMatch(fromStation, s));
+      const toIdx = toStation ? stops.findIndex(s => stationMatch(toStation, s)) : -1;
 
-    // 目的地が指定されている場合、出発地より後にあるか確認
-    if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
+      if (fromIdx === -1) continue;
+      if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
 
-    results.push({
-      routeId: route.id,
-      routeName: route.name,
-      company: route.company,
-      fromStop: route.stops[fromIdx],
-      toStop: toStation ? route.stops[toIdx] : route.stops[route.stops.length - 1],
-      stopsAway: toStation ? toIdx - fromIdx : null,
-      googleMapsUrl: googleMapsRouteUrl(
-        route.stops[fromIdx] + ' 沖縄',
-        (toStation ? route.stops[toIdx] : route.stops[route.stops.length - 1]) + ' 沖縄'
-      ),
-    });
+      if (!seen.has(route.id)) {
+        seen.add(route.id);
+        results.push({
+          routeId: route.id,
+          routeName: route.name,
+          company: route.company,
+          fromStop: stops[fromIdx],
+          toStop: toStation ? stops[toIdx] : stops[stops.length - 1],
+          stopsAway: toStation ? toIdx - fromIdx : null,
+          googleMapsUrl: googleMapsRouteUrl(
+            stops[fromIdx] + ' 沖縄',
+            (toStation ? stops[toIdx] : stops[stops.length - 1]) + ' 沖縄'
+          ),
+        });
+      }
+    }
   }
 
   return results;
