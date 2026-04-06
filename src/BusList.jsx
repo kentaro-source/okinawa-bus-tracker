@@ -94,11 +94,41 @@ function BusCard({ bus }) {
   );
 }
 
-export default function BusList({ buses }) {
-  if (!buses || buses.length === 0) return null;
+function OtherBusCard({ route }) {
+  return (
+    <div className="bus-card other-bus">
+      <div className="bus-status">
+        <span className="bus-emoji">🚌</span>
+      </div>
+      <div className="bus-info">
+        <div className="bus-route">
+          <span className="route-number">{route.routeId}</span>
+          <span className="route-name">{route.routeName}</span>
+        </div>
+        <div className="bus-detail">
+          <span className="bus-company">{route.company}</span>
+          <span className="bus-dest">→ {route.toStop}</span>
+        </div>
+        <a
+          className="btn-google-maps"
+          href={route.googleMapsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Google Mapsで時刻を確認
+        </a>
+      </div>
+    </div>
+  );
+}
 
-  const running = buses.filter(b => !b.notDeparted && !b.isTimetable);
-  const waiting = buses.filter(b => b.notDeparted || b.isTimetable);
+export default function BusList({ buses, otherBuses }) {
+  const hasBuses = buses && buses.length > 0;
+  const hasOther = otherBuses && otherBuses.length > 0;
+  if (!hasBuses && !hasOther) return null;
+
+  const running = hasBuses ? buses.filter(b => !b.notDeparted && !b.isTimetable) : [];
+  const waiting = hasBuses ? buses.filter(b => b.notDeparted || b.isTimetable) : [];
 
   return (
     <div className="bus-list">
@@ -115,6 +145,14 @@ export default function BusList({ buses }) {
           <div className="bus-group-header">🕐 まもなく出発</div>
           {waiting.map((bus) => (
             <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} />
+          ))}
+        </div>
+      )}
+      {hasOther && (
+        <div className="bus-group">
+          <div className="bus-group-header">🔗 他社バス（時刻表）</div>
+          {otherBuses.map((route) => (
+            <OtherBusCard key={`${route.company}-${route.routeId}`} route={route} />
           ))}
         </div>
       )}

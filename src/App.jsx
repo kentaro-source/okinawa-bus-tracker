@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { getBusesBetween } from './api'
+import { getOtherBusesBetween } from './otherBuses'
 import BusList from './BusList'
 import StationSelector from './StationSelector'
 import './App.css'
@@ -59,6 +60,7 @@ function App() {
     toInternalName(localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル')
   );
   const [buses, setBuses] = useState([]);
+  const [otherBuses, setOtherBuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -74,10 +76,13 @@ function App() {
       setError(null);
       if (from === to) {
         setBuses([]);
+        setOtherBuses([]);
         prevBusesRef.current = [];
         setLastUpdate(new Date());
         return;
       }
+      // 他社バス（静的データ、即時）
+      setOtherBuses(getOtherBusesBetween(from, to));
       const data = await getBusesBetween(from, to);
 
       // 前回表示されていたバスが今回消えた場合、最大2サイクル（90秒）維持（瞬断防止）
@@ -255,7 +260,7 @@ function App() {
             現在、{toDisplayName(station)}→{toDisplayName(destination)}のバスは見つかりませんでした
           </div>
         )}
-        <BusList buses={filteredBuses} />
+        <BusList buses={filteredBuses} otherBuses={otherBuses} />
       </main>
 
       <footer className="footer">
