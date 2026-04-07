@@ -109,11 +109,11 @@ function OtherBusCard({ route }) {
         {route.departures && route.departures.length > 0 && (
           <div className="bus-eta">
             <span className="eta-time">
-              次 {route.departures[0].time}発（あと{route.departures[0].eta}分）
+              {route.fromStop} {route.departures[0].time}発（あと{route.departures[0].eta}分）
             </span>
             {route.departures[1] && (
               <span className="eta-next">
-                　その次 {route.departures[1].time}
+                　次 {route.departures[1].time}
               </span>
             )}
           </div>
@@ -163,7 +163,7 @@ export default function BusList({ buses, otherBuses }) {
       )}
       {hasOther && (
         <div className="bus-group">
-          <div className="bus-group-header">🔗 他社バス（時刻表）</div>
+          <div className="bus-group-header">🕐 時刻表（定期便）</div>
           {otherBuses.map((route) => (
             <OtherBusCard key={`${route.company}-${route.routeId}`} route={route} />
           ))}
