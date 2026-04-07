@@ -1,5 +1,6 @@
 // バスナビ沖縄API対象外のバス会社データ（GTFS静的データベース）
 // リアルタイム位置は取得できないため、時刻表ベース＋Google Mapsリンクで案内
+import { TIMETABLE } from './otherBusTimetable';
 
 // Google Mapsでバス停を検索するURL
 function googleMapsStopUrl(stopName) {
@@ -150,8 +151,76 @@ const ALL_OTHER_STOPS = (() => {
   return stopSet;
 })();
 
+// 時刻表からバス停名にマッチするキーを探す
+function findTimetableStop(timetableStops, stopName) {
+  if (!timetableStops) return null;
+  // 完全一致
+  if (timetableStops[stopName]) return stopName;
+  // 部分一致・エイリアス
+  for (const key of Object.keys(timetableStops)) {
+    if (stationMatch(stopName, key)) return key;
+  }
+  return null;
+}
+
+// 時刻表ルートキーを生成
+function timetableRouteKey(company, routeId) {
+  // GTFSのroute_short_nameとotherBuses.jsのidが異なる場合のマッピング
+  const keyMap = {
+    'カリー観光:KR853': 'カリー観光:',
+    'カリー観光:KR854': 'カリー観光:',
+    'カリー観光:KR797': 'カリー観光:パルコシティシャトル',
+    'カリー観光:KR798': 'カリー観光:パルコシティシャトル',
+    '沖縄エアポートシャトル:OAS-APL': '沖縄エアポートシャトル:OAS/APL',
+    '沖縄エアポートシャトル:OAS-RSL': '沖縄エアポートシャトル:OAS/RSL',
+    '沖縄エアポートシャトル:OAS-RSL-RP': '沖縄エアポートシャトル:OAS/RSL-RP',
+  };
+  const directKey = `${company}:${routeId}`;
+  if (TIMETABLE[directKey]) return directKey;
+  if (keyMap[directKey] && TIMETABLE[keyMap[directKey]]) return keyMap[directKey];
+  // 部分一致
+  for (const key of Object.keys(TIMETABLE)) {
+    if (key.startsWith(company + ':') && key.includes(routeId)) return key;
+  }
+  return null;
+}
+
+// 現在時刻から次の発車時刻を取得（最大maxCount本）
+function getNextDepartures(routeKey, stopName, maxCount = 2) {
+  const timetableStops = TIMETABLE[routeKey];
+  if (!timetableStops) return [];
+
+  const ttStop = findTimetableStop(timetableStops, stopName);
+  if (!ttStop) return [];
+
+  const entries = timetableStops[ttStop];
+  if (!entries) return [];
+
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7; // 月=0,...日=6 → ビットマスク位置
+  const dowBit = 1 << dow;
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const times = [];
+  for (const [mask, timeStr] of entries) {
+    if (!(mask & dowBit)) continue;
+    for (const t of timeStr.split(',')) {
+      const [h, m] = t.split(':').map(Number);
+      const mins = h * 60 + m;
+      const eta = mins - nowMinutes;
+      if (eta > 0 && eta <= 30) {
+        times.push({ time: t, minutes: mins, eta });
+      }
+    }
+  }
+
+  times.sort((a, b) => a.minutes - b.minutes);
+  return times.slice(0, maxCount);
+}
+
 // 出発地→目的地間のバスを検索（他社バス）
 // 両方のバス停を含む路線を返す（往復両方向チェック）
+// 次の発車時刻がある路線のみ表示
 export function getOtherBusesBetween(fromStation, toStation) {
   const results = [];
   const seen = new Set(); // 同じ路線IDの重複防止
@@ -169,6 +238,13 @@ export function getOtherBusesBetween(fromStation, toStation) {
       if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
 
       if (!seen.has(route.id)) {
+        // 時刻表から次の発車時刻を取得
+        const routeKey = timetableRouteKey(route.company, route.id);
+        const departures = routeKey ? getNextDepartures(routeKey, stops[fromIdx]) : [];
+
+        // 次の便がない路線はスキップ
+        if (departures.length === 0) continue;
+
         seen.add(route.id);
         results.push({
           routeId: route.id,
@@ -177,6 +253,7 @@ export function getOtherBusesBetween(fromStation, toStation) {
           fromStop: stops[fromIdx],
           toStop: toStation ? stops[toIdx] : stops[stops.length - 1],
           stopsAway: toStation ? toIdx - fromIdx : null,
+          departures,
           googleMapsUrl: googleMapsRouteUrl(
             stops[fromIdx] + ' 沖縄',
             (toStation ? stops[toIdx] : stops[stops.length - 1]) + ' 沖縄'
@@ -186,6 +263,8 @@ export function getOtherBusesBetween(fromStation, toStation) {
     }
   }
 
+  // 直近の出発時刻順にソート
+  results.sort((a, b) => (a.departures[0]?.minutes || 9999) - (b.departures[0]?.minutes || 9999));
   return results;
 }
 

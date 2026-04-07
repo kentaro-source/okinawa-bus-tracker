@@ -95,16 +95,29 @@ function BusCard({ bus }) {
 }
 
 function OtherBusCard({ route }) {
+  const nextDep = route.departures && route.departures[0];
   return (
     <div className="bus-card other-bus">
       <div className="bus-status">
-        <span className="bus-emoji">🚌</span>
+        <span className="bus-emoji">{nextDep && nextDep.eta <= 10 ? '🟡' : '🕐'}</span>
       </div>
       <div className="bus-info">
         <div className="bus-route">
           <span className="route-number">{route.routeId}</span>
           <span className="route-name">{route.routeName}</span>
         </div>
+        {route.departures && route.departures.length > 0 && (
+          <div className="bus-eta">
+            <span className="eta-time">
+              次 {route.departures[0].time}発（あと{route.departures[0].eta}分）
+            </span>
+            {route.departures[1] && (
+              <span className="eta-next">
+                　その次 {route.departures[1].time}
+              </span>
+            )}
+          </div>
+        )}
         <div className="bus-detail">
           <span className="bus-company">{route.company}</span>
           <span className="bus-dest">→ {route.toStop}</span>
@@ -115,7 +128,7 @@ function OtherBusCard({ route }) {
           target="_blank"
           rel="noopener noreferrer"
         >
-          Google Mapsで時刻を確認
+          Google Mapsで確認
         </a>
       </div>
     </div>
