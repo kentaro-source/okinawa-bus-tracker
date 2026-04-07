@@ -50,8 +50,8 @@ body {
 .header-route {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 18px;
+  gap: 2px;
+  font-size: clamp(13px, 3.8vw, 18px);
   font-weight: 700;
 }
 
@@ -237,6 +237,24 @@ body {
 
 .error {
   color: var(--red);
+}
+
+.empty-hint {
+  font-size: 13px;
+  margin-top: 8px;
+  color: var(--text2);
+}
+
+.btn-gmaps-empty {
+  display: inline-block;
+  margin-top: 16px;
+  background: var(--bg3);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 14px;
+  text-decoration: none;
 }
 
 /* Direction Tabs */

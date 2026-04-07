@@ -438,8 +438,11 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         if (s.OrderNo <= ourOrder) continue;
         if (destOrder != null && s.OrderNo >= destOrder) break; // 目的地以降は不要
         const base = getBaseName(s.Station.Name);
-        if (VIA_LANDMARKS.some(v => base.includes(v)) && !viaStops.includes(base)) {
-          viaStops.push(base);
+        if (VIA_LANDMARKS.some(v => base.includes(v))) {
+          const displayName = VIA_DISPLAY_NAMES[base] || base;
+          if (!viaStops.includes(displayName)) {
+            viaStops.push(displayName);
+          }
         }
         if (viaStops.length >= 3) break;
       }

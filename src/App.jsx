@@ -255,9 +255,17 @@ function App() {
         {error && (
           <div className="error">エラー: {error}</div>
         )}
-        {!loading && filteredBuses.length === 0 && !error && (
+        {!loading && filteredBuses.length === 0 && otherBuses.length === 0 && !error && (
           <div className="empty">
-            現在、{toDisplayName(station)}→{toDisplayName(destination)}のバスは見つかりませんでした
+            <p>現在、{toDisplayName(station)}→{toDisplayName(destination)}のバスは見つかりませんでした</p>
+            <p className="empty-hint">
+              {new Date().getHours() >= 22 || new Date().getHours() < 5
+                ? '深夜帯のため運行が終了している可能性があります'
+                : '直通バスがない区間か、一時的にデータが取得できない状態です'}
+            </p>
+            <a className="btn-gmaps-empty" href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(toDisplayName(station) + 'バス停 沖縄')}&destination=${encodeURIComponent(toDisplayName(destination) + 'バス停 沖縄')}&travelmode=transit`} target="_blank" rel="noopener noreferrer">
+              Google Mapsで経路を確認
+            </a>
           </div>
         )}
         <BusList buses={filteredBuses} otherBuses={otherBuses} />

@@ -7,9 +7,9 @@ function googleMapsStopUrl(stopName) {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stopName + ' バス停 沖縄')}`;
 }
 
-// Google Mapsで路線の経路検索URL
-function googleMapsRouteUrl(from, to, companyName) {
-  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}&travelmode=transit`;
+// Google Mapsで路線の経路検索URL（バス停名+沖縄で精度を上げる）
+function googleMapsRouteUrl(from, to) {
+  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from + 'バス停 沖縄')}&destination=${encodeURIComponent(to + 'バス停 沖縄')}&travelmode=transit`;
 }
 
 // 東京バス路線データ
@@ -255,8 +255,8 @@ export function getOtherBusesBetween(fromStation, toStation) {
           stopsAway: toStation ? toIdx - fromIdx : null,
           departures,
           googleMapsUrl: googleMapsRouteUrl(
-            stops[fromIdx] + ' 沖縄',
-            (toStation ? stops[toIdx] : stops[stops.length - 1]) + ' 沖縄'
+            stops[fromIdx],
+            toStation ? stops[toIdx] : stops[stops.length - 1]
           ),
         });
       }
