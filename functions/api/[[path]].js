@@ -164,6 +164,36 @@ function parseVehiclePositions(data) {
   return vehicles;
 }
 
+// GTFS-RT tripUpdatesをパース（tripId → stopUpdates のマップを返す）
+function parseTripUpdates(data) {
+  const buf = new Uint8Array(data);
+  const msg = decodeProtobuf(buf, 0, buf.length);
+  const entities = msg[2] || [];
+  const trips = {};
+
+  for (const eb of entities) {
+    const entity = decodeProtobuf(eb, 0, eb.length);
+    if (!entity[3]) continue; // field 3 = trip_update
+    const tu = decodeProtobuf(entity[3][0], 0, entity[3][0].length);
+    const trip = tu[1] ? decodeProtobuf(tu[1][0], 0, tu[1][0].length) : {};
+    const tripId = trip[1]?.[0] ? textFromBuf(trip[1][0]) : null;
+    if (!tripId) continue;
+
+    const stopUpdates = [];
+    for (const sb of (tu[2] || [])) {
+      const su = decodeProtobuf(sb, 0, sb.length);
+      const stopSeq = su[1] || null; // field 1 = stop_sequence
+      const stopId = su[4]?.[0] ? textFromBuf(su[4][0]) : null;
+      // field 2 = arrival, field 3 = departure
+      const dep = su[3] ? decodeProtobuf(su[3][0], 0, su[3][0].length) : null;
+      const depTime = dep?.[2] || null; // field 2 = time (timestamp)
+      stopUpdates.push({ stopId, stopSeq, depTime });
+    }
+    trips[tripId] = stopUpdates;
+  }
+  return trips;
+}
+
 // 現在の曜日種別を判定
 function getDayType() {
   // JST (UTC+9) で曜日判定
@@ -179,13 +209,27 @@ export async function onRequest(context) {
   const url = new URL(context.request.url);
   const path = url.pathname.replace(/^\/api\//, '');
 
-  // OTTOP GTFS-RT: 東京バスのリアルタイム車両位置
+  // OTTOP GTFS-RT: 東京バスのリアルタイム車両位置 + 遅延情報
   if (path === 'TokyoBusPositions') {
     try {
-      const res = await fetch('https://api.ottop.org/realtime/7011501003070/vehiclePositions');
-      if (!res.ok) throw new Error('OTTOP API error: ' + res.status);
-      const data = await res.arrayBuffer();
-      const vehicles = parseVehiclePositions(data);
+      const [vpRes, tuRes] = await Promise.all([
+        fetch('https://api.ottop.org/realtime/7011501003070/vehiclePositions'),
+        fetch('https://api.ottop.org/realtime/7011501003070/tripUpdates'),
+      ]);
+      if (!vpRes.ok) throw new Error('OTTOP vehiclePositions error: ' + vpRes.status);
+
+      const vehicles = parseVehiclePositions(await vpRes.arrayBuffer());
+
+      // tripUpdatesがあれば遅延情報をマージ
+      if (tuRes.ok) {
+        const tripUpdates = parseTripUpdates(await tuRes.arrayBuffer());
+        for (const v of vehicles) {
+          if (v.tripId && tripUpdates[v.tripId]) {
+            v.stopUpdates = tripUpdates[v.tripId];
+          }
+        }
+      }
+
       return new Response(JSON.stringify(vehicles), {
         headers: {
           'Content-Type': 'application/json',

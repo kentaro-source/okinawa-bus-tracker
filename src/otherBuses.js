@@ -330,8 +330,22 @@ export async function getTokyoBusLive(fromStation, toStation) {
           if (nearestIdx >= fromIdx) continue;
 
           const stopsAway = fromIdx - nearestIdx;
-          // 1停留所あたり約3分で概算
-          const etaMinutes = stopsAway * 3;
+
+          // tripUpdatesのstopUpdatesからETAを計算
+          let etaMinutes;
+          if (v.stopUpdates && v.stopUpdates.length > 0) {
+            // 出発バス停に最も近いstopUpdateの出発予定時刻を使う
+            const lastUpdate = v.stopUpdates[v.stopUpdates.length - 1];
+            if (lastUpdate.depTime) {
+              const now = Date.now() / 1000;
+              etaMinutes = Math.round((lastUpdate.depTime - now) / 60);
+            } else {
+              etaMinutes = stopsAway * 3;
+            }
+          } else {
+            // フォールバック: 1停留所あたり約3分で概算
+            etaMinutes = stopsAway * 3;
+          }
 
           results.push({
             routeKey: route.id,
