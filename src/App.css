@@ -702,6 +702,16 @@ body {
   opacity: 0.85;
 }
 
+.bus-live {
+  font-size: 12px;
+  color: var(--green);
+  margin-top: 4px;
+}
+
+.live-stop {
+  color: var(--text2);
+}
+
 .btn-google-maps {
   display: inline-block;
   background: var(--bg3);

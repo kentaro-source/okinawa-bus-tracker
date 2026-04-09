@@ -282,6 +282,50 @@ function stationMatch(query, stopName) {
   return false;
 }
 
+// 東京バスのGTFS-RTリアルタイム車両位置を取得
+export async function getTokyoBusPositions() {
+  try {
+    const res = await fetch('/api/TokyoBusPositions');
+    if (!res.ok) return [];
+    const vehicles = await res.json();
+    if (!Array.isArray(vehicles)) return [];
+
+    // 各車両を最寄りの路線・バス停にマッチング
+    return vehicles.filter(v => v.lat && v.lng).map(v => {
+      let bestRoute = null;
+      let bestStop = null;
+      let bestDist = Infinity;
+
+      for (const route of TOKYO_BUS_ROUTES) {
+        for (const stop of route.stops) {
+          const stopInfo = ALL_OTHER_STOPS.get(stop);
+          if (!stopInfo || !stopInfo.lat || !stopInfo.lng) continue;
+          const dist = Math.hypot(v.lat - stopInfo.lat, v.lng - stopInfo.lng);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestRoute = route;
+            bestStop = stop;
+          }
+        }
+      }
+
+      return {
+        vehicleId: v.vehicleId,
+        lat: v.lat,
+        lng: v.lng,
+        timestamp: v.timestamp,
+        routeId: bestRoute?.id || null,
+        routeName: bestRoute?.name || null,
+        nearestStop: bestStop,
+        distanceKm: bestDist * 111, // 概算km
+      };
+    });
+  } catch (e) {
+    console.warn('Tokyo Bus GTFS-RT fetch failed:', e);
+    return [];
+  }
+}
+
 // バス停名の検索（StationSelectorで使用）
 export function searchOtherStops(query) {
   if (!query || query.length === 0) return [];

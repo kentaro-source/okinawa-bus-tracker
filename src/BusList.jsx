@@ -122,6 +122,14 @@ function OtherBusCard({ route }) {
           <span className="bus-company">{route.company}</span>
           <span className="bus-dest">→ {route.toStop}</span>
         </div>
+        {route.liveVehicles && route.liveVehicles.length > 0 && (
+          <div className="bus-live">
+            🛰 {route.liveVehicles.length}台走行中
+            {route.liveVehicles[0].nearestStop && (
+              <span className="live-stop">（{route.liveVehicles[0].nearestStop}付近）</span>
+            )}
+          </div>
+        )}
         <a
           className="btn-google-maps"
           href={route.googleMapsUrl}
