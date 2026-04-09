@@ -282,44 +282,86 @@ function stationMatch(query, stopName) {
   return false;
 }
 
-// 東京バスのGTFS-RTリアルタイム車両位置を取得
-export async function getTokyoBusPositions() {
+// 2点間の距離（度→km概算）
+function geoDistKm(lat1, lng1, lat2, lng2) {
+  const dlat = (lat2 - lat1) * 111;
+  const dlng = (lng2 - lng1) * 91; // 沖縄の緯度での経度1度≈91km
+  return Math.sqrt(dlat * dlat + dlng * dlng);
+}
+
+// 東京バスのGTFS-RTリアルタイム車両位置を取得し、出発バス停に向かうバスを検出
+export async function getTokyoBusLive(fromStation, toStation) {
   try {
     const res = await fetch('/api/TokyoBusPositions');
     if (!res.ok) return [];
     const vehicles = await res.json();
-    if (!Array.isArray(vehicles)) return [];
+    if (!Array.isArray(vehicles) || vehicles.length === 0) return [];
 
-    // 各車両を最寄りの路線・バス停にマッチング
-    return vehicles.filter(v => v.lat && v.lng).map(v => {
-      let bestRoute = null;
-      let bestStop = null;
-      let bestDist = Infinity;
+    const results = [];
 
+    for (const v of vehicles) {
+      if (!v.lat || !v.lng) continue;
+
+      // 各路線の各方向で、車両がどのバス停付近にいるか判定
       for (const route of TOKYO_BUS_ROUTES) {
-        for (const stop of route.stops) {
-          const stopInfo = ALL_OTHER_STOPS.get(stop);
-          if (!stopInfo || !stopInfo.lat || !stopInfo.lng) continue;
-          const dist = Math.hypot(v.lat - stopInfo.lat, v.lng - stopInfo.lng);
-          if (dist < bestDist) {
-            bestDist = dist;
-            bestRoute = route;
-            bestStop = stop;
+        const directions = [route.stops, [...route.stops].reverse()];
+        for (const stops of directions) {
+          const fromIdx = stops.findIndex(s => stationMatch(fromStation, s));
+          const toIdx = toStation ? stops.findIndex(s => stationMatch(toStation, s)) : -1;
+          if (fromIdx === -1) continue;
+          if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
+
+          // 車両の最寄りバス停を探す
+          let nearestIdx = -1;
+          let nearestDist = Infinity;
+          for (let i = 0; i < stops.length; i++) {
+            const info = ALL_OTHER_STOPS.get(stops[i]);
+            if (!info || !info.lat || !info.lng) continue;
+            const dist = geoDistKm(v.lat, v.lng, info.lat, info.lng);
+            if (dist < nearestDist) {
+              nearestDist = dist;
+              nearestIdx = i;
+            }
           }
+
+          // 5km以上離れていたらこの路線ではない
+          if (nearestDist > 5) continue;
+          // 出発バス停より先（通過済み）ならスキップ
+          if (nearestIdx >= fromIdx) continue;
+
+          const stopsAway = fromIdx - nearestIdx;
+          // 1停留所あたり約3分で概算
+          const etaMinutes = stopsAway * 3;
+
+          results.push({
+            routeKey: route.id,
+            routeName: route.name,
+            routeShort: route.id,
+            direction: '',
+            busId: `gtfs-rt-${v.vehicleId}`,
+            company: '東京バス',
+            position: { lat: v.lat, lng: v.lng },
+            gpsTime: v.timestamp ? new Date(v.timestamp * 1000) : null,
+            scheduledTime: null,
+            scheduledHour: null,
+            scheduledMinute: null,
+            etaMinutes,
+            delayMinutes: 0,
+            passed: false,
+            notDeparted: false,
+            destination: toStation || stops[stops.length - 1],
+            speed: null,
+            currentStop: stops[nearestIdx],
+            stopsAway,
+            viaStops: [],
+            isTokyoBusLive: true,
+          });
+          break; // 1つの方向でマッチしたら次の路線へ
         }
       }
+    }
 
-      return {
-        vehicleId: v.vehicleId,
-        lat: v.lat,
-        lng: v.lng,
-        timestamp: v.timestamp,
-        routeId: bestRoute?.id || null,
-        routeName: bestRoute?.name || null,
-        nearestStop: bestStop,
-        distanceKm: bestDist * 111, // 概算km
-      };
-    });
+    return results;
   } catch (e) {
     console.warn('Tokyo Bus GTFS-RT fetch failed:', e);
     return [];

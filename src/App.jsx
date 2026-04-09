@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
 import { getBusesBetween } from './api'
-import { getOtherBusesBetween, getTokyoBusPositions } from './otherBuses'
+import { getOtherBusesBetween, getTokyoBusLive } from './otherBuses'
 import BusList from './BusList'
 import StationSelector from './StationSelector'
 import './App.css'
@@ -81,27 +81,21 @@ function App() {
         setLastUpdate(new Date());
         return;
       }
-      // 他社バス（静的データ、即時）+ 東京バスリアルタイム位置
-      const otherRoutes = getOtherBusesBetween(from, to);
-      getTokyoBusPositions().then(positions => {
-        // 東京バス路線にリアルタイム車両位置を追加
-        for (const route of otherRoutes) {
-          if (route.company === '東京バス') {
-            route.liveVehicles = positions.filter(v => v.routeId === route.routeId);
-          }
-        }
-        setOtherBuses([...otherRoutes]);
-      }).catch(() => setOtherBuses(otherRoutes));
-      setOtherBuses(otherRoutes); // 先に時刻表だけ表示
-      const data = await getBusesBetween(from, to);
+      // 他社バス（静的データ、即時）
+      setOtherBuses(getOtherBusesBetween(from, to));
+      const [data, tokyoLive] = await Promise.all([
+        getBusesBetween(from, to),
+        getTokyoBusLive(from, to),
+      ]);
 
       // 前回表示されていたバスが今回消えた場合、最大2サイクル（90秒）維持（瞬断防止）
-      const newKeys = new Set(data.map(b => b.busId));
+      const allData = [...data, ...tokyoLive];
+      const newKeys = new Set(allData.map(b => b.busId));
       const retained = prevBusesRef.current.filter(b =>
         !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && (b._retainCount || 0) < 2
       ).map(b => ({ ...b, _retainCount: (b._retainCount || 0) + 1 }));
 
-      const merged = [...data, ...retained].sort((a, b) => {
+      const merged = [...allData, ...retained].sort((a, b) => {
         if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
         if (a.etaMinutes === null) return 1;
         if (b.etaMinutes === null) return -1;
