@@ -100,6 +100,70 @@ function parseTimetableHtml(html) {
   return routes;
 }
 
+// GTFS-RT protobufデコーダ（軽量版）
+function decodeProtobuf(buf, start, end) {
+  const fields = {};
+  let pos = start || 0;
+  end = end || buf.length;
+  while (pos < end) {
+    let result = 0, shift = 0, b;
+    do { b = buf[pos++]; result |= (b & 0x7f) << shift; shift += 7; } while (b & 0x80 && pos < end);
+    const fieldNum = result >> 3, wireType = result & 7;
+    if (wireType === 0) {
+      result = 0; shift = 0;
+      do { b = buf[pos++]; result |= (b & 0x7f) << shift; shift += 7; } while (b & 0x80 && pos < end);
+      fields[fieldNum] = result;
+    } else if (wireType === 2) {
+      result = 0; shift = 0;
+      do { b = buf[pos++]; result |= (b & 0x7f) << shift; shift += 7; } while (b & 0x80 && pos < end);
+      if (pos + result > end) break;
+      if (!fields[fieldNum]) fields[fieldNum] = [];
+      fields[fieldNum].push(new Uint8Array(buf.buffer || buf, buf.byteOffset + pos, result));
+      pos += result;
+    } else if (wireType === 5) {
+      if (pos + 4 > end) break;
+      const view = new DataView(buf.buffer || buf, buf.byteOffset + pos, 4);
+      fields[fieldNum] = view.getFloat32(0, true);
+      pos += 4;
+    } else if (wireType === 1) {
+      if (pos + 8 > end) break;
+      pos += 8;
+    } else break;
+  }
+  return fields;
+}
+
+function textFromBuf(arr) {
+  return arr ? new TextDecoder().decode(arr) : undefined;
+}
+
+// GTFS-RT vehiclePositionsをJSONに変換
+function parseVehiclePositions(data) {
+  const buf = new Uint8Array(data);
+  const msg = decodeProtobuf(buf, 0, buf.length);
+  const entities = msg[2] || [];
+  const vehicles = [];
+  for (const eb of entities) {
+    const entity = decodeProtobuf(eb, 0, eb.length);
+    const id = entity[1]?.[0] ? textFromBuf(entity[1][0]) : null;
+    if (!entity[4]) continue;
+    const vp = decodeProtobuf(entity[4][0], 0, entity[4][0].length);
+    const pos = vp[2] ? decodeProtobuf(vp[2][0], 0, vp[2][0].length) : {};
+    const trip = vp[1] ? decodeProtobuf(vp[1][0], 0, vp[1][0].length) : {};
+    const veh = vp[8] ? decodeProtobuf(vp[8][0], 0, vp[8][0].length) : {};
+    vehicles.push({
+      id,
+      lat: pos[1] || null,
+      lng: pos[2] || null,
+      tripId: trip[1]?.[0] ? textFromBuf(trip[1][0]) : null,
+      routeId: trip[5]?.[0] ? textFromBuf(trip[5][0]) : null,
+      vehicleId: veh[1]?.[0] ? textFromBuf(veh[1][0]) : null,
+      timestamp: vp[5] || null,
+    });
+  }
+  return vehicles;
+}
+
 // 現在の曜日種別を判定
 function getDayType() {
   // JST (UTC+9) で曜日判定
@@ -114,6 +178,28 @@ function getDayType() {
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const path = url.pathname.replace(/^\/api\//, '');
+
+  // OTTOP GTFS-RT: 東京バスのリアルタイム車両位置
+  if (path === 'TokyoBusPositions') {
+    try {
+      const res = await fetch('https://api.ottop.org/realtime/7011501003070/vehiclePositions');
+      if (!res.ok) throw new Error('OTTOP API error: ' + res.status);
+      const data = await res.arrayBuffer();
+      const vehicles = parseVehiclePositions(data);
+      return new Response(JSON.stringify(vehicles), {
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Cache-Control': 'public, max-age=30',
+        },
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: e.message }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
+    }
+  }
 
   // Custom endpoint: return all routes as JSON
   if (path === 'GetRouteList') {
