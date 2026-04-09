@@ -11,6 +11,29 @@ const STATION_ALIASES = {
   '那覇バスターミナル': ['旭橋', 'バスターミナル前'],
 };
 
+// 那覇空港の乗り場番号（出発のりば）
+// ソース: naha-airport.co.jp, OTTOP API
+const NAHA_AIRPORT_PLATFORMS = {
+  // のりば1: 東京バス、カリー観光
+  'TK01': '1', 'TK02': '1', 'TK03': '1', 'TK04': '1', 'TK05': '1', 'TK06': '1',
+  '北谷ライナー': '1',
+  // のりば2: 高速バス、やんばる急行
+  '111': '2', '117': '2',
+  'YKB888': '2',
+  // のりば3: 空港路線（メイン4社）
+  '23': '3', '26': '3', '99': '3', '113': '3', '120': '3', '125': '3', '132': '3', '143': '3', '152': '3',
+  // のりば4
+  '83': '3', '190': '4',
+  // 沖縄エアポートシャトル
+  'OAS': '1',
+};
+
+// 路線番号から那覇空港の乗り場番号を取得
+export function getAirportPlatform(routeShort) {
+  if (!routeShort) return null;
+  return NAHA_AIRPORT_PLATFORMS[routeShort] || null;
+}
+
 // 逆引き: API上の正式名 → 内部統一名（エイリアス検索で使用）
 const STATION_REVERSE_ALIASES = {
   '国内線旅客ターミナル前': '那覇空港',

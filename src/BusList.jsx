@@ -1,3 +1,5 @@
+import { getAirportPlatform } from './api'
+
 function MapLink({ stationName }) {
   const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
   return (
@@ -41,7 +43,7 @@ function formatDelay(minutes) {
   return `${Math.abs(minutes)}分早い`;
 }
 
-function BusCard({ bus }) {
+function BusCard({ bus, platform }) {
   const color = getStatusColor(bus.etaMinutes);
 
   return (
@@ -63,7 +65,11 @@ function BusCard({ bus }) {
             </span>
           )}
         </div>
-        {bus.isTimetable ? (
+        {bus.isScheduleOnly ? (
+          <div className="bus-position not-departed">
+            🕐 {bus.scheduledTime}発 <span className="schedule-label">（時刻表）</span>
+          </div>
+        ) : bus.isTimetable ? (
           <div className="bus-position not-departed">
             🕐 {bus.scheduledTime}発
           </div>
@@ -88,6 +94,7 @@ function BusCard({ bus }) {
           <span className="bus-company">{bus.company}</span>
           {bus.scheduledTime && <span className="bus-scheduled">{bus.isHolidayVariant ? '定刻≈' : '定刻 '}{bus.scheduledTime}</span>}
           <span className="bus-dest">→ {bus.destination}</span>
+          {platform && <span className="bus-platform">のりば{platform}</span>}
         </div>
       </div>
     </div>
@@ -135,21 +142,52 @@ function OtherBusCard({ route }) {
   );
 }
 
-export default function BusList({ buses, otherBuses }) {
-  const hasBuses = buses && buses.length > 0;
-  const hasOther = otherBuses && otherBuses.length > 0;
-  if (!hasBuses && !hasOther) return null;
+export default function BusList({ buses, otherBuses, fromStation }) {
+  // otherBusesをBusCard形式に変換して統合
+  const otherAsBusCards = (otherBuses || []).flatMap(route => {
+    if (!route.departures || route.departures.length === 0) return [];
+    return route.departures.slice(0, 2).map((dep, i) => ({
+      routeKey: route.routeId,
+      routeName: route.routeName,
+      routeShort: route.routeId,
+      direction: '',
+      busId: `other-${route.routeId}-${dep.time}-${i}`,
+      company: route.company,
+      position: null,
+      gpsTime: null,
+      scheduledTime: dep.time,
+      scheduledHour: parseInt(dep.time.split(':')[0]),
+      scheduledMinute: parseInt(dep.time.split(':')[1]),
+      etaMinutes: dep.eta,
+      delayMinutes: 0,
+      passed: false,
+      notDeparted: true,
+      destination: route.toStop,
+      speed: null,
+      currentStop: null,
+      stopsAway: null,
+      viaStops: [],
+      isScheduleOnly: true, // 定刻データフラグ
+      googleMapsUrl: route.googleMapsUrl,
+    }));
+  });
 
-  const running = hasBuses ? buses.filter(b => !b.notDeparted && !b.isTimetable) : [];
-  const waiting = hasBuses ? buses.filter(b => b.notDeparted || b.isTimetable) : [];
+  const allBuses = [...(buses || []), ...otherAsBusCards];
+  if (allBuses.length === 0) return null;
+
+  const running = allBuses.filter(b => !b.notDeparted && !b.isTimetable && !b.isScheduleOnly);
+  const waiting = allBuses.filter(b => b.notDeparted || b.isTimetable || b.isScheduleOnly)
+    .sort((a, b) => (a.etaMinutes ?? 999) - (b.etaMinutes ?? 999));
+
+  const isAirport = fromStation === '那覇空港';
 
   return (
     <div className="bus-list">
       {running.length > 0 && (
         <div className="bus-group">
           <div className="bus-group-header">🚌 走行中</div>
-          {running.map((bus, i) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
+          {running.map((bus) => (
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} platform={isAirport ? getAirportPlatform(bus.routeShort) : null} />
           ))}
         </div>
       )}
@@ -157,15 +195,7 @@ export default function BusList({ buses, otherBuses }) {
         <div className="bus-group">
           <div className="bus-group-header">🕐 まもなく出発</div>
           {waiting.map((bus) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} />
-          ))}
-        </div>
-      )}
-      {hasOther && (
-        <div className="bus-group">
-          <div className="bus-group-header">🕐 時刻表（定期便）</div>
-          {otherBuses.map((route) => (
-            <OtherBusCard key={`${route.company}-${route.routeId}`} route={route} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} platform={isAirport ? getAirportPlatform(bus.routeShort) : null} />
           ))}
         </div>
       )}

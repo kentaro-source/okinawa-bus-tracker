@@ -272,7 +272,7 @@ function App() {
             </a>
           </div>
         )}
-        <BusList buses={filteredBuses} otherBuses={otherBuses} />
+        <BusList buses={filteredBuses} otherBuses={otherBuses} fromStation={station} />
       </main>
 
       <footer className="footer">
