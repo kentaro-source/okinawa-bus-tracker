@@ -1,6 +1,6 @@
 // バスナビ沖縄API対象外のバス会社データ（GTFS静的データベース）
 // リアルタイム位置は取得できないため、時刻表ベース＋Google Mapsリンクで案内
-import { TIMETABLE } from './otherBusTimetable';
+import { TIMETABLE, DIRECTION_MAP } from './otherBusTimetable';
 
 // Google Mapsでバス停を検索するURL
 function googleMapsStopUrl(stopName) {
@@ -163,22 +163,23 @@ function findTimetableStop(timetableStops, stopName) {
   return null;
 }
 
-// 時刻表ルートキーを生成
-function timetableRouteKey(company, routeId) {
-  // GTFSのroute_short_nameとotherBuses.jsのidが異なる場合のマッピング
-  const keyMap = {
-    'カリー観光:KR853': 'カリー観光:',
-    'カリー観光:KR854': 'カリー観光:',
-    'カリー観光:KR797': 'カリー観光:パルコシティシャトル',
-    'カリー観光:KR798': 'カリー観光:パルコシティシャトル',
-    '沖縄エアポートシャトル:OAS-APL': '沖縄エアポートシャトル:OAS/APL',
-    '沖縄エアポートシャトル:OAS-RSL': '沖縄エアポートシャトル:OAS/RSL',
-    '沖縄エアポートシャトル:OAS-RSL-RP': '沖縄エアポートシャトル:OAS/RSL-RP',
-  };
+// 時刻表ルートキーを生成（方向付き）
+function timetableRouteKey(company, routeId, isForward = true) {
+  // 方向マッピング: forwardがdown/upどちらか
+  const dirMap = DIRECTION_MAP[routeId];
+  const dir = dirMap
+    ? (isForward ? dirMap.forward : dirMap.reverse)
+    : (isForward ? 'down' : 'up');
+
+  // 方向付きキーを優先（新フォーマット）
+  const dirKey = `${company}:${routeId}:${dir}`;
+  if (TIMETABLE[dirKey]) return dirKey;
+
+  // 旧フォーマット（方向なし）フォールバック
   const directKey = `${company}:${routeId}`;
   if (TIMETABLE[directKey]) return directKey;
-  if (keyMap[directKey] && TIMETABLE[keyMap[directKey]]) return keyMap[directKey];
-  // 部分一致
+
+  // 部分一致（旧フォーマット互換）
   for (const key of Object.keys(TIMETABLE)) {
     if (key.startsWith(company + ':') && key.includes(routeId)) return key;
   }
@@ -230,7 +231,9 @@ export function getOtherBusesBetween(fromStation, toStation) {
 
     // 順方向・逆方向の両方をチェック
     const directions = [route.stops, [...route.stops].reverse()];
-    for (const stops of directions) {
+    for (let dirIdx = 0; dirIdx < directions.length; dirIdx++) {
+      const stops = directions[dirIdx];
+      const isForward = dirIdx === 0;
       const fromIdx = stops.findIndex(s => stationMatch(fromStation, s));
       const toIdx = toStation ? stops.findIndex(s => stationMatch(toStation, s)) : -1;
 
@@ -238,8 +241,8 @@ export function getOtherBusesBetween(fromStation, toStation) {
       if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
 
       if (!seen.has(route.id)) {
-        // 時刻表から次の発車時刻を取得
-        const routeKey = timetableRouteKey(route.company, route.id);
+        // 時刻表から次の発車時刻を取得（方向付き）
+        const routeKey = timetableRouteKey(route.company, route.id, isForward);
         const departures = routeKey ? getNextDepartures(routeKey, stops[fromIdx]) : [];
 
         // 次の便がない路線はスキップ
