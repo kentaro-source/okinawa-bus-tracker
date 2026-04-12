@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { fetchAllRoutes, getCoursesGroup, getStations, runWithConcurrency } from './api'
 import { ALL_OTHER_STOPS } from './otherBuses'
 
-const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
+const STATION_CACHE_KEY = 'bus-tracker-station-cache-v3';
 const OLD_CACHE_KEY = 'bus-tracker-station-cache';
 
 const POPULAR_STOPS = [

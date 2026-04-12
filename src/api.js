@@ -418,8 +418,11 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
     const notDeparted = !busAlreadyPassed && passages.length === 0;
 
     // If not departed and past scheduled time, mark as possibly delayed
-    // Keep ETA as 1 so it's not filtered out (actual arrival unknown)
     if (notDeparted && etaMinutes !== null && etaMinutes <= 0) {
+      if (etaMinutes < -30) {
+        // 30分以上遅れは異常 → 表示しない
+        continue;
+      }
       delayMinutes = Math.abs(etaMinutes);
       etaMinutes = 1; // keep visible, show as "まもなく"
     }
@@ -497,7 +500,7 @@ export async function runWithConcurrency(tasks, limit) {
 // キャッシュから路線の停留所順序を取得（from→toが正方向かチェック用）
 function getRouteOrderAtStation(stationName, routeShort) {
   try {
-    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
+    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v3'));
     if (!cached || !cached.data) return null;
     for (const s of cached.data) {
       if (s.name === stationName || s.name.includes(stationName) || stationName.includes(s.name)) {
@@ -523,7 +526,7 @@ function getRouteOrderAtStation(stationName, routeShort) {
 // Collects routes from ALL matching stations (not just the first match)
 function getCachedRoutesForStation(stationName) {
   try {
-    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
+    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v3'));
     if (cached && cached.data) {
       const routes = new Set();
 
