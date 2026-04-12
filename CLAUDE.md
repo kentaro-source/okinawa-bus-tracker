@@ -154,7 +154,6 @@
 ## 未解決・要検証（2026-04-12セッション）
 - 方向フィルタ（routeOrder）の実地検証: 始発停で中間停留所検索が正しく動くか要確認
 - 東京バスGTFS-RTで車両位置が表示されない: Google Mapsでも非表示だったためデータソース側の問題の可能性。復旧後に再確認
-- schedule-only busのGoogle Mapsリンク: fromStopが「那覇空港」だと空港ビルに飛ばされる（バス停ではなく）。正式バス停名への変換が必要
 - 旧build-timetable.cjs: GTFSデータが手元にないため動作しない。build-timetable-api.cjs（OTTOP API版）に置き換え済みだが旧ファイルが残っている
 
 ## コミュニケーション方針
