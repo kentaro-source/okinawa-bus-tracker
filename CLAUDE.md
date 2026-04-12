@@ -131,6 +131,8 @@
 - 接近情報API（Approach）は出発地に向かう全バスを返す（目的地フィルタなし）→ getBusesBetweenでフィルタ
 - 行先表示は個別バスのPassedSchedules最終停留所を使用（group.YukisakiNameは不正確な場合がある）
 - 空港バス停名の内部統一: 那覇空港/国内線旅客ターミナル前/国際線旅客ターミナル前 → 旅客ターミナル前
+- Google Mapsリンクのバス停名変換: BusList.jsxのtoMapsStopName()で「那覇空港」→「国内線旅客ターミナル前」に変換（空港ビルではなくバス停にリンク）
+- build-timetable-api.cjs: OTTOP timetable APIから方向別時刻表を生成。平日/土/日の3日分取得、上り/下り分離、2秒間隔のrate limit対策。GTFSデータ不要
 - Approach APIの制限: 全路線のバスを返すわけではない（例: 屋富祖で63番・24番が返らない）
   - BusLocation APIで補完しているが、バス停キャッシュに路線がないとクエリされない
   - 対策: 出発地＋目的地の両方のキャッシュから路線を取得（デュアルキャッシュ参照）
