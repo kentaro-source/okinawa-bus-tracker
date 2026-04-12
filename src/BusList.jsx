@@ -1,3 +1,5 @@
+import { getAirportPlatform } from './api'
+
 // Googleマップでバス停にヒットする名前に変換
 function toMapsStopName(name) {
   if (name === '那覇空港' || name === '旅客ターミナル前')
@@ -48,7 +50,7 @@ function formatDelay(minutes) {
   return `${Math.abs(minutes)}分早い`;
 }
 
-function BusCard({ bus }) {
+function BusCard({ bus, platform }) {
   const color = getStatusColor(bus.etaMinutes);
 
   return (
@@ -99,6 +101,7 @@ function BusCard({ bus }) {
           <span className="bus-company">{bus.company}</span>
           {bus.scheduledTime && !bus.isScheduleOnly && <span className="bus-scheduled">{bus.isHolidayVariant ? '定刻≈' : '定刻 '}{bus.scheduledTime}</span>}
           <span className="bus-dest">→ {bus.destination}</span>
+          {platform && <span className="bus-platform">のりば{platform}</span>}
         </div>
         {bus.isScheduleOnly && (
           <a
@@ -115,9 +118,13 @@ function BusCard({ bus }) {
   );
 }
 
-export default function BusList({ buses }) {
+export default function BusList({ buses, fromStation }) {
   const hasBuses = buses && buses.length > 0;
   if (!hasBuses) return null;
+
+  // 出発地が那覇空港系の場合、乗り場番号を表示
+  const isAirport = fromStation === '旅客ターミナル前' || fromStation === '那覇空港'
+    || fromStation === '国内線旅客ターミナル前' || fromStation === '国際線旅客ターミナル前';
 
   const running = hasBuses ? buses.filter(b => !b.notDeparted && !b.isTimetable) : [];
   const waiting = hasBuses ? buses.filter(b => b.notDeparted || b.isTimetable) : [];
@@ -128,7 +135,7 @@ export default function BusList({ buses }) {
         <div className="bus-group">
           <div className="bus-group-header">🚌 走行中</div>
           {running.map((bus, i) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} platform={isAirport ? getAirportPlatform(bus.routeShort) : null} />
           ))}
         </div>
       )}
@@ -136,7 +143,7 @@ export default function BusList({ buses }) {
         <div className="bus-group">
           <div className="bus-group-header">🕐 まもなく出発</div>
           {waiting.map((bus) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} platform={isAirport ? getAirportPlatform(bus.routeShort) : null} />
           ))}
         </div>
       )}
