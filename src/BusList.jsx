@@ -1,3 +1,10 @@
+// Googleマップでバス停にヒットする名前に変換
+function toMapsStopName(name) {
+  if (name === '那覇空港' || name === '旅客ターミナル前')
+    return '国内線旅客ターミナル前';
+  return name;
+}
+
 function MapLink({ stationName }) {
   const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
   return (
@@ -97,11 +104,11 @@ function BusCard({ bus }) {
         {bus.isScheduleOnly && (
           <a
             className="btn-google-maps"
-            href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(bus.fromStop + 'バス停 沖縄')}&destination=${encodeURIComponent(bus.destination + 'バス停 沖縄')}&travelmode=transit`}
+            href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(toMapsStopName(bus.fromStop) + ' バス停')}&destination=${encodeURIComponent(toMapsStopName(bus.destination) + ' バス停')}&travelmode=transit`}
             target="_blank"
             rel="noopener noreferrer"
           >
-            Google Mapsで確認
+            Google Mapsで経路確認
           </a>
         )}
       </div>
