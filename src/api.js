@@ -494,6 +494,31 @@ export async function runWithConcurrency(tasks, limit) {
   return results;
 }
 
+// キャッシュから路線の停留所順序を取得（from→toが正方向かチェック用）
+function getRouteOrderAtStation(stationName, routeShort) {
+  try {
+    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
+    if (!cached || !cached.data) return null;
+    for (const s of cached.data) {
+      if (s.name === stationName || s.name.includes(stationName) || stationName.includes(s.name)) {
+        if (s.routeOrder && s.routeOrder[routeShort] != null) return s.routeOrder[routeShort];
+      }
+    }
+    // エイリアス対応
+    const aliases = STATION_ALIASES[stationName];
+    if (aliases) {
+      for (const alias of aliases) {
+        for (const s of cached.data) {
+          if (s.name.includes(alias) && s.routeOrder && s.routeOrder[routeShort] != null) {
+            return s.routeOrder[routeShort];
+          }
+        }
+      }
+    }
+  } catch {}
+  return null;
+}
+
 // Look up which route numbers serve a station (from station cache)
 // Collects routes from ALL matching stations (not just the first match)
 function getCachedRoutesForStation(stationName) {
@@ -835,12 +860,18 @@ export async function getBusesBetween(fromStation, toStation) {
     // 目的地フィルタ: 行先に目的地が含まれているか、行先の途中に目的地があるか
     if (!toStation) return true;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-    // 時刻表由来: 終点名に目的地が含まれないが、目的地が途中にある可能性あり
-    // → キャッシュで路線が目的地を通るか確認
+    // 時刻表由来: 行き先名に目的地が含まれないが、途中で通る可能性あり
+    // → キャッシュで路線が目的地を通るか確認 + 停留所順序で方向判定
     if (b.isTimetable) {
       const destRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
-      if (destRoutes && destRoutes.includes(b.routeShort)) return true;
-      return false;
+      if (!destRoutes || !destRoutes.includes(b.routeShort)) return false;
+      // 方向判定: fromの順序 < toの順序なら同方向
+      const fromOrder = getRouteOrderAtStation(fromStation, b.routeShort);
+      const toOrder = getRouteOrderAtStation(toStation, b.routeShort);
+      if (fromOrder != null && toOrder != null) {
+        return toOrder > fromOrder; // toがfromより後 = 同方向
+      }
+      return true; // 順序不明ならフォールバックで表示
     }
     return false;
   });

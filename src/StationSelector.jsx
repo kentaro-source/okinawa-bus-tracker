@@ -143,7 +143,8 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
         const groups = await getCoursesGroup(route.keitouSid);
         for (const group of groups) {
           const stations = await getStations(route.keitouSid, group.Sid);
-          for (const s of stations) {
+          for (let stIdx = 0; stIdx < stations.length; stIdx++) {
+            const s = stations[stIdx];
             const cleanName = s.Name
               .replace(/（.*?）/g, '').replace(/\(.*?\)/g, '')
               .replace(/[\s　]+(おりば|のりば|乗り場|乗場)[\s　]*\S*/g, '')
@@ -157,11 +158,16 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                 lat: s.Position?.Latitude || null,
                 lng: s.Position?.Longitude || null,
                 routes: [route.short],
+                routeOrder: { [route.short]: stIdx },
               });
             } else {
               const existing = stationSet.get(cleanName);
               if (!existing.routes.includes(route.short)) {
                 existing.routes.push(route.short);
+              }
+              if (!existing.routeOrder) existing.routeOrder = {};
+              if (existing.routeOrder[route.short] == null) {
+                existing.routeOrder[route.short] = stIdx;
               }
               if (!existing.lat && s.Position?.Latitude) {
                 existing.lat = s.Position.Latitude;
