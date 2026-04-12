@@ -419,8 +419,8 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
 
     // If not departed and past scheduled time, mark as possibly delayed
     if (notDeparted && etaMinutes !== null && etaMinutes <= 0) {
-      if (etaMinutes < -30) {
-        // 30分以上遅れは異常 → 表示しない
+      if (etaMinutes < -120) {
+        // 2時間以上遅れは異常データ → 表示しない
         continue;
       }
       delayMinutes = Math.abs(etaMinutes);
