@@ -200,6 +200,12 @@ body {
   margin-left: 8px;
 }
 
+.btn-gmaps-header {
+  margin-left: 8px;
+  font-size: 16px;
+  text-decoration: none;
+}
+
 .info-modal {
   max-width: 360px;
 }
