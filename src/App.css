@@ -414,15 +414,6 @@ body {
   font-weight: 600;
 }
 
-.bus-schedule-tag {
-  font-size: 10px;
-  background: var(--text-dim);
-  color: var(--bg);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-weight: 600;
-  margin-left: 4px;
-}
 
 .bus-via {
   font-size: 11px;
