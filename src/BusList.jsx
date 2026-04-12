@@ -54,6 +54,7 @@ function BusCard({ bus }) {
           <span className="route-number">{bus.routeShort}番</span>
           <span className="route-name">{bus.routeName.replace(/^\d+番\s*/, '')}</span>
           {bus.isHolidayVariant && <span className="bus-holiday-tag">臨時</span>}
+          {bus.isScheduleOnly && <span className="bus-schedule-tag">📋</span>}
         </div>
         <div className="bus-eta">
           <span className="eta-time">{formatETA(bus.etaMinutes)}</span>
@@ -94,51 +95,9 @@ function BusCard({ bus }) {
   );
 }
 
-function OtherBusCard({ route }) {
-  const nextDep = route.departures && route.departures[0];
-  return (
-    <div className="bus-card other-bus">
-      <div className="bus-status">
-        <span className="bus-emoji">{nextDep && nextDep.eta <= 10 ? '🟡' : '🕐'}</span>
-      </div>
-      <div className="bus-info">
-        <div className="bus-route">
-          <span className="route-number">{route.routeId}</span>
-          <span className="route-name">{route.routeName}</span>
-        </div>
-        {route.departures && route.departures.length > 0 && (
-          <div className="bus-eta">
-            <span className="eta-time">
-              {route.fromStop} {route.departures[0].time}発（あと{route.departures[0].eta}分）
-            </span>
-            {route.departures[1] && (
-              <span className="eta-next">
-                　次 {route.departures[1].time}
-              </span>
-            )}
-          </div>
-        )}
-        <div className="bus-detail">
-          <span className="bus-company">{route.company}</span>
-          <span className="bus-dest">→ {route.toStop}</span>
-        </div>
-        <a
-          className="btn-google-maps"
-          href={route.googleMapsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Google Mapsで確認
-        </a>
-      </div>
-    </div>
-  );
-}
-
-export default function BusList({ buses, otherBuses }) {
+export default function BusList({ buses }) {
   const hasBuses = buses && buses.length > 0;
-  const hasOther = otherBuses && otherBuses.length > 0;
-  if (!hasBuses && !hasOther) return null;
+  if (!hasBuses) return null;
 
   const running = hasBuses ? buses.filter(b => !b.notDeparted && !b.isTimetable) : [];
   const waiting = hasBuses ? buses.filter(b => b.notDeparted || b.isTimetable) : [];
@@ -158,14 +117,6 @@ export default function BusList({ buses, otherBuses }) {
           <div className="bus-group-header">🕐 まもなく出発</div>
           {waiting.map((bus) => (
             <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} />
-          ))}
-        </div>
-      )}
-      {hasOther && (
-        <div className="bus-group">
-          <div className="bus-group-header">🕐 時刻表（定期便）</div>
-          {otherBuses.map((route) => (
-            <OtherBusCard key={`${route.company}-${route.routeId}`} route={route} />
           ))}
         </div>
       )}

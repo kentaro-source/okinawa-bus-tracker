@@ -60,7 +60,7 @@ function App() {
     toInternalName(localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル')
   );
   const [buses, setBuses] = useState([]);
-  const [otherBuses, setOtherBuses] = useState([]);
+  // otherBusesは内部変数（BusCard形式に変換してbusesにマージ）
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -76,20 +76,45 @@ function App() {
       setError(null);
       if (from === to) {
         setBuses([]);
-        setOtherBuses([]);
         prevBusesRef.current = [];
         setLastUpdate(new Date());
         return;
       }
-      // 他社バス（静的データ、即時）
-      setOtherBuses(getOtherBusesBetween(from, to));
+      // 他社バス時刻表（静的データ）→ BusCard形式に変換
+      const otherRoutes = getOtherBusesBetween(from, to);
+      const scheduleBuses = [];
+      for (const route of otherRoutes) {
+        for (const dep of route.departures || []) {
+          scheduleBuses.push({
+            routeKey: `schedule-${route.routeId}`,
+            routeShort: route.routeId,
+            routeName: route.routeName,
+            busId: `schedule-${route.routeId}-${dep.time}`,
+            company: route.company,
+            destination: route.toStop,
+            etaMinutes: dep.eta,
+            scheduledTime: dep.time,
+            scheduledHour: parseInt(dep.time.split(':')[0]),
+            scheduledMinute: parseInt(dep.time.split(':')[1]),
+            delayMinutes: 0,
+            notDeparted: false,
+            isTimetable: true,
+            isScheduleOnly: true,
+            currentStop: null,
+            stopsAway: null,
+            viaStops: [],
+            direction: '',
+            passed: false,
+          });
+        }
+      }
       const [data, tokyoLive] = await Promise.all([
         getBusesBetween(from, to),
         getTokyoBusLive(from, to),
       ]);
 
       // 前回表示されていたバスが今回消えた場合、最大2サイクル（90秒）維持（瞬断防止）
-      const allData = [...data, ...tokyoLive];
+      const allData = [...data, ...tokyoLive, ...scheduleBuses];
       const newKeys = new Set(allData.map(b => b.busId));
       const retained = prevBusesRef.current.filter(b =>
         !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && (b._retainCount || 0) < 2
@@ -259,7 +284,7 @@ function App() {
         {error && (
           <div className="error">エラー: {error}</div>
         )}
-        {!loading && filteredBuses.length === 0 && otherBuses.length === 0 && !error && (
+        {!loading && filteredBuses.length === 0 && !error && (
           <div className="empty">
             <p>現在、{toDisplayName(station)}→{toDisplayName(destination)}のバスは見つかりませんでした</p>
             <p className="empty-hint">
@@ -272,7 +297,7 @@ function App() {
             </a>
           </div>
         )}
-        <BusList buses={filteredBuses} otherBuses={otherBuses} />
+        <BusList buses={filteredBuses} />
       </main>
 
       <footer className="footer">
