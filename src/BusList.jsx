@@ -54,7 +54,7 @@ function BusCard({ bus }) {
           <span className="route-number">{bus.routeShort}番</span>
           <span className="route-name">{bus.routeName.replace(/^\d+番\s*/, '')}</span>
           {bus.isHolidayVariant && <span className="bus-holiday-tag">臨時</span>}
-          {bus.isScheduleOnly && <span className="bus-schedule-tag">📋</span>}
+          {bus.isScheduleOnly && <span className="bus-schedule-tag">時刻表</span>}
         </div>
         <div className="bus-eta">
           <span className="eta-time">{formatETA(bus.etaMinutes)}</span>
@@ -64,7 +64,11 @@ function BusCard({ bus }) {
             </span>
           )}
         </div>
-        {bus.isTimetable ? (
+        {bus.isScheduleOnly ? (
+          <div className="bus-position not-departed">
+            🕐 {bus.scheduledTime}発（位置情報なし）
+          </div>
+        ) : bus.isTimetable ? (
           <div className="bus-position not-departed">
             🕐 {bus.scheduledTime}発
           </div>
@@ -87,9 +91,19 @@ function BusCard({ bus }) {
         )}
         <div className="bus-detail">
           <span className="bus-company">{bus.company}</span>
-          {bus.scheduledTime && <span className="bus-scheduled">{bus.isHolidayVariant ? '定刻≈' : '定刻 '}{bus.scheduledTime}</span>}
+          {bus.scheduledTime && !bus.isScheduleOnly && <span className="bus-scheduled">{bus.isHolidayVariant ? '定刻≈' : '定刻 '}{bus.scheduledTime}</span>}
           <span className="bus-dest">→ {bus.destination}</span>
         </div>
+        {bus.isScheduleOnly && (
+          <a
+            className="btn-google-maps"
+            href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(bus.fromStop + 'バス停 沖縄')}&destination=${encodeURIComponent(bus.destination + 'バス停 沖縄')}&travelmode=transit`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Google Mapsで確認
+          </a>
+        )}
       </div>
     </div>
   );

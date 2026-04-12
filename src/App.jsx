@@ -100,6 +100,7 @@ function App() {
             notDeparted: false,
             isTimetable: true,
             isScheduleOnly: true,
+            fromStop: route.fromStop,
             currentStop: null,
             stopsAway: null,
             viaStops: [],
