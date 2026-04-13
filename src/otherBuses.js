@@ -48,6 +48,11 @@ const TOKYO_BUS_ROUTES = [
     name: '北谷ゲートウェイライナー',
     company: '東京バス',
     stops: ['那覇空港', '国際通り入口', '北谷ゲートウェイ'],
+    // GTFSのpickup_type/drop_off_typeより:
+    // 下り（那覇空港→北谷）: 国際通り入口は乗車専用（降車不可）
+    // 上り（北谷→那覇空港）: 国際通り入口は降車専用（乗車不可）
+    fwdNoAlight: ['国際通り入口'],
+    revNoBoard: ['国際通り入口'],
   },
   {
     id: 'TK06',
@@ -129,12 +134,18 @@ const AIRPORT_SHUTTLE_ROUTES = [
     name: 'リゾートライナー',
     company: '沖縄エアポートシャトル',
     stops: ['那覇空港', '県庁北口', 'ナビービーチ前', 'おんなの駅', 'タイガービーチ前', 'サンマリーナビーチ前', 'ハレクラニ沖縄前', 'かりゆしビーチ前', '名護市役所前', '本部港', '沖縄美ら海水族館', 'エメラルドビーチ前', '備瀬フクギ並木入口'],
+    // 下り（那覇→北部）: 県庁北口は乗車専用（降車不可）
+    // 上り（北部→那覇）: 美ら海・エメラルド・備瀬は降車専用（乗車不可）
+    fwdNoAlight: ['県庁北口'],
+    revNoBoard: ['沖縄美ら海水族館', 'エメラルドビーチ前', '備瀬フクギ並木入口'],
   },
   {
     id: 'OAS-RSL-RP',
     name: 'リゾートライナー特急',
     company: '沖縄エアポートシャトル',
     stops: ['那覇空港', '県庁北口', '名護市役所前', '本部港', '沖縄美ら海水族館', 'エメラルドビーチ前', '備瀬フクギ並木入口'],
+    fwdNoAlight: ['県庁北口'],
+    revNoBoard: ['沖縄美ら海水族館', 'エメラルドビーチ前', '備瀬フクギ並木入口'],
   },
 ];
 
@@ -262,14 +273,21 @@ export function getOtherBusesBetween(fromStation, toStation) {
   for (const route of ALL_OTHER_ROUTES) {
     if (seen.has(route.id)) continue;
 
-    // 順方向・逆方向の両方をチェック
-    const directions = [route.stops, [...route.stops].reverse()];
-    for (const stops of directions) {
+    // 順方向・逆方向の両方をチェック（乗降制限付き）
+    const directions = [
+      { stops: route.stops, noAlight: route.fwdNoAlight || [], noBoard: route.fwdNoBoard || [] },
+      { stops: [...route.stops].reverse(), noAlight: route.revNoAlight || [], noBoard: route.revNoBoard || [] },
+    ];
+    for (const { stops, noAlight, noBoard } of directions) {
       const fromIdx = stops.findIndex(s => stationMatch(fromStation, s));
       const toIdx = toStation ? stops.findIndex(s => stationMatch(toStation, s)) : -1;
 
       if (fromIdx === -1) continue;
       if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
+
+      // 乗降制限チェック: 乗車不可のバス停からは乗れない、降車不可のバス停では降りれない
+      if (noBoard.some(s => stationMatch(stops[fromIdx], s))) continue;
+      if (toStation && noAlight.some(s => stationMatch(stops[toIdx], s))) continue;
 
       // 同じルートID+同じ出発バス停の重複を防止
       const seenKey = `${route.id}:${stops[fromIdx]}`;
