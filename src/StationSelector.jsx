@@ -165,19 +165,30 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
     '琉球ホテル＆リゾート名城ビーチ': 'リュウキュウホテルナシロビーチ',
   };
 
-  // 他社バス停をallStationsにマージ（重複はスキップ）
+  // 他社バス停をallStationsにマージ（同名バス停には路線情報を追加）
   function mergeOtherStops(stations) {
-    const nameSet = new Set(stations.map(s => s.name));
-    const merged = [...stations];
+    const nameMap = new Map();
+    const merged = stations.map(s => {
+      const copy = { ...s, routes: [...s.routes] };
+      nameMap.set(s.name, copy);
+      return copy;
+    });
     for (const [name, info] of ALL_OTHER_STOPS) {
-      if (!nameSet.has(name)) {
+      const companies = Array.from(info.companies);
+      const existing = nameMap.get(name);
+      if (existing) {
+        // 既存バス停に他社の会社名を追加
+        for (const c of companies) {
+          if (!existing.routes.includes(c)) existing.routes.push(c);
+        }
+      } else {
         merged.push({
           name,
           fullName: name,
           yomigana: OTHER_STOP_YOMIGANA[name] || '',
           lat: info.lat,
           lng: info.lng,
-          routes: Array.from(info.companies),
+          routes: companies,
           isOtherBus: true,
         });
       }
@@ -456,7 +467,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                   <div key={s.name} className="station-item">
                     <button className="station-btn" onClick={() => onSelect(s.name)}>
                       <span className="station-name">{s.name}</span>
-                      <span className="station-routes">{s.isOtherBus ? s.routes.join(' ') : s.routes.map(r => r + '番').join(' ')}</span>
+                      <span className="station-routes">{s.routes.map(r => /^\d+$/.test(r) ? r + '番' : r).join(' ')}</span>
                     </button>
                     <button
                       className={`btn-fav-small ${favorites.includes(s.name) ? 'is-fav' : ''}`}
