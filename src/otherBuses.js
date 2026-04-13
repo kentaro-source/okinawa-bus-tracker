@@ -8,8 +8,17 @@ function googleMapsStopUrl(stopName) {
 }
 
 // Google Mapsで路線の経路検索URL（バス停名+沖縄で精度を上げる）
+// Google Mapsで「那覇空港バス停」だと空港建物にヒットして徒歩が入る
+// →「国内線旅客ターミナル前バス停」に変換してバス停に直接ヒットさせる
+function mapsStopName(name) {
+  if (name === '那覇空港' || name === '旅客ターミナル前') return '国内線旅客ターミナル前';
+  return name;
+}
+
 function googleMapsRouteUrl(from, to) {
-  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from + 'バス停 沖縄')}&destination=${encodeURIComponent(to + 'バス停 沖縄')}&travelmode=transit`;
+  const f = mapsStopName(from);
+  const t = mapsStopName(to);
+  return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(f + 'バス停 沖縄')}&destination=${encodeURIComponent(t + 'バス停 沖縄')}&travelmode=transit`;
 }
 
 // 東京バスもGoogle Maps経路案内（出発地→目的地）

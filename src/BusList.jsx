@@ -1,7 +1,12 @@
 import { getAirportPlatform } from './api'
 
+function mapsStopName(name) {
+  if (name === '那覇空港' || name === '旅客ターミナル前') return '国内線旅客ターミナル前';
+  return name;
+}
+
 function MapLink({ stationName }) {
-  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsStopName(stationName) + 'バス停 沖縄')}`;
   return (
     <a
       className="btn-map-inline"

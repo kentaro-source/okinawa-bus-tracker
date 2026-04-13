@@ -24,8 +24,14 @@ function toDisplayName(name) {
   if (name === '旅客ターミナル前') return '国内線旅客ターミナル前';
   return name;
 }
+function mapsStopName(name) {
+  if (name === '那覇空港' || name === '旅客ターミナル前' || name === '国内線旅客ターミナル前') return '国内線旅客ターミナル前';
+  if (name === '国際線旅客ターミナル前') return '国際線旅客ターミナル前';
+  return name;
+}
+
 function googleMapsUrl(stationName) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsStopName(stationName) + 'バス停 沖縄')}`;
 }
 
 function loadFavorites() {
