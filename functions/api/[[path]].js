@@ -205,9 +205,121 @@ function getDayType() {
   // TODO: 祝日判定
 }
 
+// LINE Bot: 署名検証
+async function verifyLineSignature(body, signature, channelSecret) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(channelSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(body));
+  const expected = btoa(String.fromCharCode(...new Uint8Array(sig)));
+  return expected === signature;
+}
+
+// LINE Bot: メッセージ返信
+async function lineReply(replyToken, messages, accessToken) {
+  await fetch('https://api.line.me/v2/bot/message/reply', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ replyToken, messages }),
+  });
+}
+
+// LINE Bot: バス停名から接近情報を取得してテキスト生成
+async function getBusInfoForLine(stationName, baseUrl) {
+  // バス停コードを取得
+  const corrRes = await fetch(
+    `${baseUrl}/api/StationCorrection?stationName=${encodeURIComponent(stationName)}`
+  );
+  const corrText = await corrRes.text();
+  let stations;
+  try { stations = JSON.parse(corrText); } catch { return `「${stationName}」が見つかりませんでした。`; }
+  if (!Array.isArray(stations) || stations.length === 0) return `「${stationName}」が見つかりませんでした。`;
+
+  const station = stations[0];
+  const code = station.StationCode || station.stationCode;
+  const name = station.StationName || station.stationName || stationName;
+  if (!code) return `「${stationName}」のバス停コードが取得できませんでした。`;
+
+  // 接近情報を取得
+  const appRes = await fetch(`${baseUrl}/api/Approach?stationCode=${encodeURIComponent(code)}`);
+  const appData = await appRes.json();
+  const buses = appData.buses || [];
+
+  if (buses.length === 0) return `📍 ${name}\n\n現在、接近中のバスはありません。`;
+
+  let text = `📍 ${name}\n\n`;
+  const shown = buses.slice(0, 5);
+  for (const b of shown) {
+    text += `🚌 ${b.routeNumber}番 ${b.routeName}\n`;
+    if (b.isApproaching) {
+      text += `  まもなく到着\n`;
+    } else if (b.stopsAway != null) {
+      text += `  ${b.stopsAway}停留所前`;
+      if (b.arrivalTime) text += `（${b.arrivalTime}到着予定）`;
+      text += `\n`;
+    }
+    if (b.currentStop) text += `  📍 ${b.currentStop}\n`;
+    text += `  → ${b.destination}\n\n`;
+  }
+  if (buses.length > 5) text += `他${buses.length - 5}件\n`;
+  text += `\n🔗 詳細: https://okinawa-bus.pages.dev`;
+  return text;
+}
+
+// LINE Bot: Webhookハンドラ
+async function handleLineWebhook(context) {
+  const channelSecret = context.env.LINE_CHANNEL_SECRET;
+  const accessToken = context.env.LINE_CHANNEL_ACCESS_TOKEN;
+
+  if (!channelSecret || !accessToken) {
+    return new Response('LINE bot not configured', { status: 500 });
+  }
+
+  const body = await context.request.text();
+  const signature = context.request.headers.get('X-Line-Signature');
+
+  if (!signature || !await verifyLineSignature(body, signature, channelSecret)) {
+    return new Response('Invalid signature', { status: 403 });
+  }
+
+  const data = JSON.parse(body);
+  const baseUrl = new URL(context.request.url).origin;
+
+  for (const event of (data.events || [])) {
+    if (event.type !== 'message' || event.message.type !== 'text') continue;
+
+    const userText = event.message.text.trim();
+
+    // ヘルプ
+    if (userText === 'ヘルプ' || userText === 'help') {
+      await lineReply(event.replyToken, [{
+        type: 'text',
+        text: '🚌 バスどこ沖縄\n\nバス停名を送信すると、接近中のバス情報をお返しします。\n\n例: 県庁北口\n例: 那覇バスターミナル\n例: おもろまち駅前',
+      }], accessToken);
+      continue;
+    }
+
+    // バス停名として検索
+    const reply = await getBusInfoForLine(userText, baseUrl);
+    await lineReply(event.replyToken, [{ type: 'text', text: reply }], accessToken);
+  }
+
+  return new Response('OK', { status: 200 });
+}
+
 export async function onRequest(context) {
   const url = new URL(context.request.url);
   const path = url.pathname.replace(/^\/api\//, '');
+
+  // LINE Bot Webhook
+  if (path === 'line-webhook') {
+    if (context.request.method === 'POST') return handleLineWebhook(context);
+    return new Response('OK', { status: 200 }); // GET for verification
+  }
 
   // OTTOP GTFS-RT: 東京バスのリアルタイム車両位置 + 遅延情報
   if (path === 'TokyoBusPositions') {
