@@ -724,6 +724,12 @@ body {
   opacity: 0.85;
 }
 
+.other-bus-note {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+
 .bus-live {
   font-size: 12px;
   color: var(--green);
