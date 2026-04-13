@@ -1,6 +1,6 @@
 // バスナビ沖縄API対象外のバス会社データ（GTFS静的データベース）
 // リアルタイム位置は取得できないため、時刻表ベース＋Google Mapsリンクで案内
-import { TIMETABLE } from './otherBusTimetable';
+import { TIMETABLE, DIRECTION_META } from './otherBusTimetable';
 
 // Google Mapsでバス停を検索するURL
 function googleMapsStopUrl(stopName) {
@@ -208,8 +208,9 @@ function findTimetableStop(timetableStops, stopName) {
   return null;
 }
 
-// 時刻表ルートキーを生成
-function timetableRouteKey(company, routeId) {
+// 時刻表ルートキーを生成（方向対応）
+// directionStops: 現在マッチしている方向のstops配列（forward or reverse）
+function timetableRouteKey(company, routeId, directionStops) {
   // GTFSのroute_short_nameとotherBuses.jsのidが異なる場合のマッピング
   const keyMap = {
     'カリー観光:KR853': 'カリー観光:北谷ライナー',
@@ -220,18 +221,67 @@ function timetableRouteKey(company, routeId) {
     '沖縄エアポートシャトル:OAS-RSL': '沖縄エアポートシャトル:OAS/RSL',
     '沖縄エアポートシャトル:OAS-RSL-RP': '沖縄エアポートシャトル:OAS/RSL-RP',
   };
+
+  // ベースキー（方向なし）を解決
   const directKey = `${company}:${routeId}`;
-  if (TIMETABLE[directKey]) return directKey;
-  if (keyMap[directKey] && TIMETABLE[keyMap[directKey]]) return keyMap[directKey];
-  // 部分一致
-  for (const key of Object.keys(TIMETABLE)) {
-    if (key.startsWith(company + ':') && key.includes(routeId)) return key;
+  let baseKey = null;
+  if (DIRECTION_META[directKey]) {
+    baseKey = directKey;
+  } else if (keyMap[directKey] && DIRECTION_META[keyMap[directKey]]) {
+    baseKey = keyMap[directKey];
+  } else {
+    // 部分一致
+    for (const key of Object.keys(DIRECTION_META)) {
+      if (key.startsWith(company + ':') && key.includes(routeId)) {
+        baseKey = key;
+        break;
+      }
+    }
   }
-  return null;
+
+  if (!baseKey || !directionStops || directionStops.length === 0) {
+    // フォールバック: 方向0を返す
+    const fallback = `${baseKey || directKey}:0`;
+    return TIMETABLE[fallback] ? fallback : null;
+  }
+
+  // DIRECTION_METAで方向を特定
+  // directionStops[0]がDIRECTION_METAのfirstStopに近い方向を選ぶ
+  const meta = DIRECTION_META[baseKey];
+  if (!meta) {
+    const fallback = `${baseKey}:0`;
+    return TIMETABLE[fallback] ? fallback : null;
+  }
+
+  const fromStop = directionStops[0];
+  const toStop = directionStops[directionStops.length - 1];
+
+  let bestDir = 0;
+  let bestScore = -1;
+
+  for (let d = 0; d < meta.length; d++) {
+    if (!meta[d]) continue;
+    const [dirFirst, dirLast] = meta[d];
+    // fromStopがdirFirstに近い＝同じ方向
+    let score = 0;
+    if (stationMatch(fromStop, dirFirst)) score += 10;
+    if (stationMatch(toStop, dirLast)) score += 10;
+    // firstStopの正規化比較
+    if (normalizeSpace(fromStop) === normalizeSpace(dirFirst)) score += 5;
+    if (normalizeSpace(toStop) === normalizeSpace(dirLast)) score += 5;
+    if (score > bestScore) {
+      bestScore = score;
+      bestDir = d;
+    }
+  }
+
+  const key = `${baseKey}:${bestDir}`;
+  return TIMETABLE[key] ? key : null;
 }
 
 // 現在時刻から次の発車時刻を取得（最大maxCount本）
-function getNextDepartures(routeKey, stopName, maxCount = 2) {
+// role: 'from'=出発地（乗車）, 'to'=目的地（降車）
+function getNextDepartures(routeKey, stopName, maxCount = 2, role = 'from') {
   const timetableStops = TIMETABLE[routeKey];
   if (!timetableStops) return [];
 
@@ -247,8 +297,15 @@ function getNextDepartures(routeKey, stopName, maxCount = 2) {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
 
   const times = [];
-  for (const [mask, timeStr] of entries) {
+  for (const entry of entries) {
+    const [mask, timeStr, flags] = entry;
     if (!(mask & dowBit)) continue;
+
+    // 乗降制限チェック
+    // flags: 1=乗車専用(降車不可), 2=降車専用(乗車不可)
+    if (role === 'from' && flags === 2) continue; // 降車専用のバス停からは乗れない
+    if (role === 'to' && flags === 1) continue;   // 乗車専用のバス停では降りれない
+
     for (const t of timeStr.split(',')) {
       const [h, m] = t.split(':').map(Number);
       const mins = h * 60 + m;
@@ -292,12 +349,27 @@ export function getOtherBusesBetween(fromStation, toStation) {
       // 同じルートID+同じ出発バス停の重複を防止
       const seenKey = `${route.id}:${stops[fromIdx]}`;
       if (!seen.has(seenKey)) {
-        // 時刻表から次の発車時刻を取得
-        const routeKey = timetableRouteKey(route.company, route.id);
-        const departures = routeKey ? getNextDepartures(routeKey, stops[fromIdx]) : [];
+        // 時刻表から次の発車時刻を取得（方向別）
+        const routeKey = timetableRouteKey(route.company, route.id, stops);
+        const departures = routeKey ? getNextDepartures(routeKey, stops[fromIdx], 2, 'from') : [];
 
         // 次の便がない路線はスキップ
         if (departures.length === 0) continue;
+
+        // 目的地の降車制限チェック（timetable flagsベース）
+        if (toStation && routeKey) {
+          const toCheck = getNextDepartures(routeKey, stops[toIdx], 99, 'to');
+          // 目的地で降車できる時刻が一つもなければスキップ
+          if (toCheck.length === 0 && TIMETABLE[routeKey]) {
+            const ttStop = findTimetableStop(TIMETABLE[routeKey], stops[toIdx]);
+            if (ttStop) {
+              // バス停自体はあるがflagsで全て除外された → 降車不可
+              const rawEntries = TIMETABLE[routeKey][ttStop];
+              const allPickupOnly = rawEntries && rawEntries.every(e => e[2] === 1);
+              if (allPickupOnly) continue;
+            }
+          }
+        }
 
         seen.add(seenKey);
         results.push({
