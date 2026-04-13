@@ -167,8 +167,8 @@ function findTimetableStop(timetableStops, stopName) {
 function timetableRouteKey(company, routeId) {
   // GTFSのroute_short_nameとotherBuses.jsのidが異なる場合のマッピング
   const keyMap = {
-    'カリー観光:KR853': 'カリー観光:',
-    'カリー観光:KR854': 'カリー観光:',
+    'カリー観光:KR853': 'カリー観光:北谷ライナー',
+    'カリー観光:KR854': 'カリー観光:北谷ライナー',
     'カリー観光:KR797': 'カリー観光:パルコシティシャトル',
     'カリー観光:KR798': 'カリー観光:パルコシティシャトル',
     '沖縄エアポートシャトル:OAS-APL': '沖縄エアポートシャトル:OAS/APL',

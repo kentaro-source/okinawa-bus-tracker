@@ -179,7 +179,7 @@ export default function BusList({ buses, otherBuses, fromStation }) {
   const waiting = allBuses.filter(b => b.notDeparted || b.isTimetable || b.isScheduleOnly)
     .sort((a, b) => (a.etaMinutes ?? 999) - (b.etaMinutes ?? 999));
 
-  const isAirport = fromStation === '那覇空港';
+  const isAirport = fromStation === '那覇空港' || fromStation === '旅客ターミナル前' || fromStation === '国内線旅客ターミナル前' || fromStation === '国際線旅客ターミナル前';
 
   return (
     <div className="bus-list">
