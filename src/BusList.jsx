@@ -143,7 +143,7 @@ function OtherBusCard({ route }) {
           {route.company === '東京バス'
             ? '📡 Google Mapsで遅延情報を確認できます'
             : route.company === 'やんばる急行バス'
-            ? '📋 時刻表データ（位置情報はyanbaru-bus-navi.comで確認）'
+            ? <span>📋 時刻表データ（位置情報は<a href="https://yanbaru-bus-navi.com" target="_blank" rel="noopener noreferrer">公式バスロケ</a>で確認）</span>
             : route.company === '沖縄エアポートシャトル'
             ? '📋 時刻表データ（位置情報はBus-Visionで確認）'
             : '📋 時刻表データ（リアルタイム位置情報なし）'}
