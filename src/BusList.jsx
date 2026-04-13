@@ -96,6 +96,11 @@ function BusCard({ bus, platform }) {
           <span className="bus-dest">→ {bus.destination}</span>
           {platform && <span className="bus-platform">のりば{platform}</span>}
         </div>
+        {bus.googleMapsUrl && (
+          <a className="btn-google-maps" href={bus.googleMapsUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+            Google Mapsで確認
+          </a>
+        )}
       </div>
     </div>
   );
