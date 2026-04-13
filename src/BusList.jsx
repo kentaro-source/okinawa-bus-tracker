@@ -101,6 +101,17 @@ function BusCard({ bus, platform }) {
           <span className="bus-dest">→ {bus.destination}</span>
           {platform && <span className="bus-platform">のりば{platform}</span>}
         </div>
+        {bus.isScheduleOnly && (
+          <div className="other-bus-note">
+            {bus.company === '東京バス'
+              ? '📡 Google Mapsで遅延情報を確認できます'
+              : bus.company === 'やんばる急行バス'
+              ? <span>📋 時刻表データ（位置情報は<a href="https://yanbaru-bus-navi.com" target="_blank" rel="noopener noreferrer">公式バスロケ</a>で確認）</span>
+              : bus.company === '沖縄エアポートシャトル'
+              ? '📋 時刻表データ（位置情報はBus-Visionで確認）'
+              : '📋 時刻表データ（リアルタイム位置情報なし）'}
+          </div>
+        )}
         {bus.googleMapsUrl && (
           <a className="btn-google-maps" href={bus.googleMapsUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
             Google Mapsで確認
