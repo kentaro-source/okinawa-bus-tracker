@@ -170,11 +170,21 @@ const ALL_OTHER_STOPS = (() => {
   return stopSet;
 })();
 
+// スペース正規化（全角・半角スペースを統一）
+function normalizeSpace(s) {
+  return s.replace(/[\s　]+/g, ' ').trim();
+}
+
 // 時刻表からバス停名にマッチするキーを探す
 function findTimetableStop(timetableStops, stopName) {
   if (!timetableStops) return null;
   // 完全一致
   if (timetableStops[stopName]) return stopName;
+  // スペース正規化で一致
+  const normName = normalizeSpace(stopName);
+  for (const key of Object.keys(timetableStops)) {
+    if (normalizeSpace(key) === normName) return key;
+  }
   // 部分一致・エイリアス
   for (const key of Object.keys(timetableStops)) {
     if (stationMatch(stopName, key)) return key;
@@ -247,16 +257,18 @@ export function getOtherBusesBetween(fromStation, toStation) {
   for (const route of ALL_OTHER_ROUTES) {
     if (seen.has(route.id)) continue;
 
-    // 停留所順序で方向判定（往路・復路は別ルートIDで定義済み）
-    {
-      const stops = route.stops;
+    // 順方向・逆方向の両方をチェック
+    const directions = [route.stops, [...route.stops].reverse()];
+    for (const stops of directions) {
       const fromIdx = stops.findIndex(s => stationMatch(fromStation, s));
       const toIdx = toStation ? stops.findIndex(s => stationMatch(toStation, s)) : -1;
 
       if (fromIdx === -1) continue;
       if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
 
-      if (!seen.has(route.id)) {
+      // 同じルートID+同じ出発バス停の重複を防止
+      const seenKey = `${route.id}:${stops[fromIdx]}`;
+      if (!seen.has(seenKey)) {
         // 時刻表から次の発車時刻を取得
         const routeKey = timetableRouteKey(route.company, route.id);
         const departures = routeKey ? getNextDepartures(routeKey, stops[fromIdx]) : [];
@@ -264,7 +276,7 @@ export function getOtherBusesBetween(fromStation, toStation) {
         // 次の便がない路線はスキップ
         if (departures.length === 0) continue;
 
-        seen.add(route.id);
+        seen.add(seenKey);
         results.push({
           routeId: route.id,
           routeName: route.name,
@@ -280,7 +292,7 @@ export function getOtherBusesBetween(fromStation, toStation) {
         });
       }
     }
-  }  // end for routes
+  }
 
   // 直近の出発時刻順にソート
   results.sort((a, b) => (a.departures[0]?.minutes || 9999) - (b.departures[0]?.minutes || 9999));
