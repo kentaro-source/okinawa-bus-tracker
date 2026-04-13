@@ -108,7 +108,7 @@ function BusCard({ bus, platform }) {
               : bus.company === 'やんばる急行バス'
               ? <span>📋 時刻表データ（位置情報は<a href="https://yanbaru-bus-navi.com" target="_blank" rel="noopener noreferrer">公式バスロケ</a>で確認）</span>
               : bus.company === '沖縄エアポートシャトル'
-              ? '📋 時刻表データ（位置情報はBus-Visionで確認）'
+              ? <span>📋 時刻表データ（位置情報は<a href="http://bus-viewer.jp/okinawa-shuttle/view/searchDistrict.html?lang=0" target="_blank" rel="noopener noreferrer">Bus-Vision</a>で確認）</span>
               : '📋 時刻表データ（リアルタイム位置情報なし）'}
           </div>
         )}
