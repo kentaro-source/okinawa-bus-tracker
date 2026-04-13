@@ -83,13 +83,12 @@ function App() {
       }
       // 他社バス（静的データ、即時）
       setOtherBuses(getOtherBusesBetween(from, to));
-      const [data, tokyoLive] = await Promise.all([
-        getBusesBetween(from, to),
-        getTokyoBusLive(from, to),
-      ]);
+      const data = await getBusesBetween(from, to);
+      // 東京バスGTFS-RTは一時停止（ルート方向判定・座標マッチング要改善）
+      // const tokyoLive = await getTokyoBusLive(from, to);
 
       // 前回表示されていたバスが今回消えた場合、最大2サイクル（90秒）維持（瞬断防止）
-      const allData = [...data, ...tokyoLive];
+      const allData = data;
       const newKeys = new Set(allData.map(b => b.busId));
       const retained = prevBusesRef.current.filter(b =>
         !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && (b._retainCount || 0) < 2
