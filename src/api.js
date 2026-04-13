@@ -858,13 +858,10 @@ export async function getBusesBetween(fromStation, toStation) {
     // 目的地フィルタ: 行先に目的地が含まれているか、行先の途中に目的地があるか
     if (!toStation) return true;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-    // 時刻表由来: 終点名に目的地が含まれないが、目的地が途中にある可能性あり
-    // → キャッシュで路線が目的地を通るか確認
-    if (b.isTimetable) {
-      const destRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
-      if (destRoutes && destRoutes.includes(b.routeShort)) return true;
-      return false;
-    }
+    // 時刻表由来: 行先名が目的地と一致しない → 逆方向の可能性が高いため除外
+    // （キャッシュベースの路線チェックは方向を考慮しないため使わない）
+    // 走行中バスは別途realtimeデータで正しい方向判定がされる
+    if (b.isTimetable) return false;
     return false;
   });
 
