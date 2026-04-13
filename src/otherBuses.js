@@ -12,6 +12,11 @@ function googleMapsRouteUrl(from, to) {
   return `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from + 'バス停 沖縄')}&destination=${encodeURIComponent(to + 'バス停 沖縄')}&travelmode=transit`;
 }
 
+// 東京バスはGoogle Mapsで路線名検索（遅延情報が見れる）
+function tokyoBusGoogleMapsUrl(routeName) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent('東京バス ' + routeName + ' 沖縄')}`;
+}
+
 // 東京バス路線データ
 const TOKYO_BUS_ROUTES = [
   {
@@ -285,10 +290,12 @@ export function getOtherBusesBetween(fromStation, toStation) {
           toStop: toStation ? stops[toIdx] : stops[stops.length - 1],
           stopsAway: toStation ? toIdx - fromIdx : null,
           departures,
-          googleMapsUrl: googleMapsRouteUrl(
-            stops[fromIdx],
-            toStation ? stops[toIdx] : stops[stops.length - 1]
-          ),
+          googleMapsUrl: route.company === '東京バス'
+            ? tokyoBusGoogleMapsUrl(route.name)
+            : googleMapsRouteUrl(
+                stops[fromIdx],
+                toStation ? stops[toIdx] : stops[stops.length - 1]
+              ),
         });
       }
     }
