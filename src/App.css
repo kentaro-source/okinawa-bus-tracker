@@ -178,6 +178,13 @@ body {
   color: var(--text2);
 }
 
+.btn-transit-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  margin-left: auto;
+}
+
 .btn-refresh {
   background: none;
   border: 1px solid var(--bg3);

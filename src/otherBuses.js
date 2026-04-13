@@ -135,13 +135,32 @@ const AIRPORT_SHUTTLE_ROUTES = [
 
 const ALL_OTHER_ROUTES = [...TOKYO_BUS_ROUTES, ...YANBARU_ROUTES, ...KARRY_ROUTES, ...AIRPORT_SHUTTLE_ROUTES];
 
+// 東京バス停留所の座標（GTFS stops.txtから抽出）
+const STOP_COORDS = {
+  'イーアス沖縄豊崎': [26.156252, 127.651171],
+  '瀬長島ホテル ウミカジテラス': [26.176453, 127.641852],
+  '赤嶺駅': [26.193643, 127.660407],
+  '那覇空港': [26.206481, 127.651126],
+  'あしびなー前': [26.157929, 127.657424],
+  '国際通り入口': [26.21442, 127.680154],
+  '道の駅いとまん': [26.138723, 127.660969],
+  'サザンビーチホテル＆リゾート沖縄': [26.132392, 127.653098],
+  '糸満市役所': [26.123773, 127.66517],
+  '那覇商業高校（松山入口）': [26.216556, 127.677528],
+  '琉球ホテル＆リゾート名城ビーチ': [26.100608, 127.659446],
+  'ストーリーライン瀬長島': [26.175417, 127.643931],
+  '北谷ゲートウェイ': [26.314291, 127.758541],
+  'ジャングリア沖縄': [26.643068, 127.972481],
+};
+
 // 全バス停の一覧（重複除去）
 const ALL_OTHER_STOPS = (() => {
-  const stopSet = new Map(); // stopName -> { routes, companies }
+  const stopSet = new Map(); // stopName -> { routes, companies, lat, lng }
   for (const route of ALL_OTHER_ROUTES) {
     for (const stop of route.stops) {
       if (!stopSet.has(stop)) {
-        stopSet.set(stop, { routes: [], companies: new Set() });
+        const coord = STOP_COORDS[stop];
+        stopSet.set(stop, { routes: [], companies: new Set(), lat: coord?.[0] || null, lng: coord?.[1] || null });
       }
       const entry = stopSet.get(stop);
       entry.routes.push({ id: route.id, name: route.name, company: route.company });
@@ -228,9 +247,9 @@ export function getOtherBusesBetween(fromStation, toStation) {
   for (const route of ALL_OTHER_ROUTES) {
     if (seen.has(route.id)) continue;
 
-    // 順方向・逆方向の両方をチェック
-    const directions = [route.stops, [...route.stops].reverse()];
-    for (const stops of directions) {
+    // 停留所順序で方向判定（往路・復路は別ルートIDで定義済み）
+    {
+      const stops = route.stops;
       const fromIdx = stops.findIndex(s => stationMatch(fromStation, s));
       const toIdx = toStation ? stops.findIndex(s => stationMatch(toStation, s)) : -1;
 
@@ -261,7 +280,7 @@ export function getOtherBusesBetween(fromStation, toStation) {
         });
       }
     }
-  }
+  }  // end for routes
 
   // 直近の出発時刻順にソート
   results.sort((a, b) => (a.departures[0]?.minutes || 9999) - (b.departures[0]?.minutes || 9999));

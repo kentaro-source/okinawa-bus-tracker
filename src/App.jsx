@@ -231,6 +231,7 @@ function App() {
           <div className="header-update">
             最終更新: {lastUpdate.toLocaleTimeString('ja-JP')}
             <button className="btn-info" onClick={() => setShowInfo(true)} title="このアプリについて">？</button>
+            <a className="btn-transit-link" href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(toDisplayName(station) + 'バス停 沖縄')}&destination=${encodeURIComponent(toDisplayName(destination) + 'バス停 沖縄')}&travelmode=transit`} target="_blank" rel="noopener noreferrer">Googleで乗換案内</a>
           </div>
         )}
       </header>
