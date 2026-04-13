@@ -142,6 +142,10 @@ function OtherBusCard({ route }) {
         <div className="other-bus-note">
           {route.company === '東京バス'
             ? '📡 Google Mapsで遅延情報を確認できます'
+            : route.company === 'やんばる急行バス'
+            ? '📋 時刻表データ（位置情報はyanbaru-bus-navi.comで確認）'
+            : route.company === '沖縄エアポートシャトル'
+            ? '📋 時刻表データ（位置情報はBus-Visionで確認）'
             : '📋 時刻表データ（リアルタイム位置情報なし）'}
         </div>
         <a
