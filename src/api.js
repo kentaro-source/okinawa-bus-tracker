@@ -574,7 +574,9 @@ function getCachedRoutesForStation(stationName) {
 // with confirmed from→to direction (used to validate isTimetable buses)
 async function fetchBusesForRoutes(routes, stationName, destinationName) {
   const results = [];
-  const confirmedRoutes = new Set(); // 方向確認済み路線番号
+  // 方向確認済み路線: routeShort → コース終点名のSet
+  // isTimetableバスのdestinationがこの終点名にマッチすれば正しい方向と判定
+  const confirmedRouteEnds = new Map();
 
   const tasks = routes.map((route) => async () => {
     try {
@@ -612,8 +614,12 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
           });
           if (!hasValidPair) continue;
 
-          // この方向で出発→目的地の順序が確認された
-          confirmedRoutes.add(route.short);
+          // この方向で出発→目的地の順序が確認された → コースの終点名を記録
+          const lastStation = stations[stations.length - 1];
+          if (lastStation) {
+            if (!confirmedRouteEnds.has(route.short)) confirmedRouteEnds.set(route.short, new Set());
+            confirmedRouteEnds.get(route.short).add(getBaseName(lastStation.Name));
+          }
         }
 
         // Only fetch bus locations after confirming route serves both stations
@@ -644,7 +650,7 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
       return a.etaMinutes - b.etaMinutes;
     });
 
-  return { buses, confirmedRoutes };
+  return { buses, confirmedRouteEnds };
 }
 
 // StationCodeキャッシュ（セッション中有効）
@@ -859,8 +865,8 @@ export async function getBusesBetween(fromStation, toStation) {
     getApproachBuses(fromStation, toStation),
   ]);
   const realtime = realtimeResult.buses;
-  // 方向確認済み路線: GetStationsで出発→目的地の停車順序が確認された路線番号
-  const confirmedRoutes = realtimeResult.confirmedRoutes;
+  // 方向確認済み路線: GetStationsで出発→目的地の停車順序が確認された路線 + 終点名
+  const confirmedRouteEnds = realtimeResult.confirmedRouteEnds;
 
   // 接近情報を方向＋目的地でフィルタ
   const filteredApproach = approach.filter(b => {
@@ -870,9 +876,13 @@ export async function getBusesBetween(fromStation, toStation) {
     if (!toStation) return true;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
     // 時刻表由来: 行先名が目的地にマッチしない場合、
-    // GetStationsで停車順序が確認済みの路線のみ通す（バス停キャッシュは方向を区別できないため不使用）
+    // GetStationsで停車順序が確認済みの路線かつ、バスの行先が確認済みコースの終点にマッチする場合のみ通す
+    // （同じ路線でも逆方向のバスを除外するため、終点名で方向を判定）
     if (b.isTimetable) {
-      return confirmedRoutes.has(b.routeShort);
+      const ends = confirmedRouteEnds.get(b.routeShort);
+      if (!ends) return false;
+      const busDest = getBaseName(b.destination || '');
+      return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
     }
     // 接近情報の走行中バス: 出発地に向かっている（stopsAwayあり）なら残す
     // 未出発バスは行先だけでは方向判定できないため除外
