@@ -859,9 +859,11 @@ export async function getBusesBetween(fromStation, toStation) {
     if (!toStation) return true;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
     // 時刻表由来: 行先名が目的地にマッチしない → 逆方向の可能性が高いため除外
-    // 走行中バスはrealtimeデータで正しい方向判定がされるため影響なし
-    // 途中停留所への未出発バスは表示されないが、走行中バスでカバーされる
     if (b.isTimetable) return false;
+    // 接近情報の走行中バス: 出発地に向かっている（stopsAwayあり）なら残す
+    // 未出発バスは行先だけでは方向判定できないため除外
+    if (b.stopsAway != null && b.stopsAway > 0) return true;
+    if (!b.notDeparted && b.currentStop) return true;
     return false;
   });
 
