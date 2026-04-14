@@ -903,10 +903,28 @@ export async function getBusesBetween(fromStation, toStation) {
       const busDest = getBaseName(b.destination || '');
       return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
     }
-    // 接近情報の走行中バス: 出発地に向かっている（stopsAwayあり）なら残す
-    // 未出発バスは行先だけでは方向判定できないため除外
-    if (b.stopsAway != null && b.stopsAway > 0) return true;
-    if (!b.notDeparted && b.currentStop) return true;
+    // 接近情報の走行中バス: confirmedRouteEndsで方向を確認
+    // （Approach APIは方向関係なく全バスを返すため、行先が正方向か確認が必要）
+    if (b.stopsAway != null && b.stopsAway > 0) {
+      const ends = confirmedRouteEnds.get(b.routeShort);
+      if (ends) {
+        const busDest = getBaseName(b.destination || '');
+        if (!Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest))) {
+          return false; // 確認済みコースの終点にマッチしない → 逆方向
+        }
+      }
+      return true;
+    }
+    if (!b.notDeparted && b.currentStop) {
+      const ends = confirmedRouteEnds.get(b.routeShort);
+      if (ends) {
+        const busDest = getBaseName(b.destination || '');
+        if (!Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest))) {
+          return false;
+        }
+      }
+      return true;
+    }
     return false;
   });
 
