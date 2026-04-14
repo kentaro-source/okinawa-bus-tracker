@@ -869,7 +869,21 @@ export async function getBusesBetween(fromStation, toStation) {
     fetchBusesForRoutes(routes, fromStation, toStation),
     getApproachBuses(fromStation, toStation),
   ]);
-  const realtime = realtimeResult.buses;
+  // リアルタイムバスの逆方向フィルタ（processBusesで漏れたケースをキャッチ）
+  // バスの行先が出発地方面なら逆方向、目的地方面でなければ逆方向の可能性
+  const realtime = realtimeResult.buses.filter(b => {
+    if (!toStation || !b.destination) return true;
+    // 行先が出発地にマッチ → 逆方向
+    if (matchStation(fromStation, b.destination)) return false;
+    // 行先が目的地にマッチ → 正方向
+    if (filterByDestination(b.destination, b.routeName, toStation)) return true;
+    // 行先が目的地にマッチしないリアルタイムバス:
+    // 確認済みコースの終点にマッチするかで方向判定
+    const ends = realtimeResult.confirmedRouteEnds.get(b.routeShort);
+    if (!ends) return true; // 終点データなし → processBusesの判定を信頼
+    const busDest = getBaseName(b.destination || '');
+    return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
+  });
   // 方向確認済み路線: GetStationsで出発→目的地の停車順序が確認された路線 + 終点名
   const confirmedRouteEnds = realtimeResult.confirmedRouteEnds;
 
