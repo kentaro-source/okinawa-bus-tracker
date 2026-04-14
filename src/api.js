@@ -693,7 +693,7 @@ async function getApproachBuses(stationName, destinationName) {
     const stationSid = result?.stationSid || null;
 
     // 接近情報があればフォーマット
-    const formatted = buses.length > 0 ? formatApproachBuses(buses, destinationName) : [];
+    const formatted = buses.length > 0 ? formatApproachBuses(buses) : [];
 
     // 接近情報が少ない場合（始発停等）のみ時刻表を補完
     if (formatted.length < 3 && stationSid) {
@@ -711,10 +711,9 @@ async function getApproachBuses(stationName, destinationName) {
   }
 }
 
-// 接近情報をBusList形式に変換（フィルタはgetBusesBetween側で実施）
-function formatApproachBuses(buses, destinationName) {
+// 接近情報をBusList形式に変換（目的地フィルタはgetBusesBetween側で実施）
+function formatApproachBuses(buses) {
   return buses
-    .filter(b => filterByDestination(b.destination, b.routeName, destinationName))
     .map(b => {
       const timeParts = b.scheduledTime?.match(/^(\d+):(\d+)$/);
       const hour = timeParts ? parseInt(timeParts[1]) : null;
