@@ -343,18 +343,22 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
       continue;
     }
 
-    // 目的地が指定されている場合、この便のスケジュールに目的地があるか確認
-    // （AllStationsでは通るが、個別便では通らないケースを除外）
-    if (destinationName) {
-      const destInSchedule = schedules.some(s => matchStation(destinationName, s.Station.Name));
-      if (!destInSchedule) continue;
-    }
-
     // Find when bus is scheduled at our station (using base name matching + aliases)
     const stationSchedule = schedules.find(s => matchStation(stationName, s.Station.Name));
 
     // If this route doesn't pass through our station (in this direction), skip
     if (!stationSchedule) continue;
+
+    // 目的地が指定されている場合、出発地より後に目的地があるか確認
+    // （スケジュール上で出発地→目的地の順序を保証し、逆方向バスを除外）
+    if (destinationName) {
+      const depOrder = stationSchedule.OrderNo;
+      const destSchedule = schedules.find(s => matchStation(destinationName, s.Station.Name));
+      if (!destSchedule) continue;
+      const destOrder = destSchedule.OrderNo;
+      // OrderNoが両方判明している場合、目的地が出発地より後であることを確認
+      if (depOrder != null && destOrder != null && destOrder <= depOrder) continue;
+    }
 
     // Check if bus already passed our station (match same station as schedule)
     const matchedStationName = stationSchedule.Station.Name;
