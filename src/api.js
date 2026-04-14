@@ -570,8 +570,11 @@ function getCachedRoutesForStation(stationName) {
 }
 
 // Fetch buses for a given set of routes, filtered by station name
+// Returns { buses, confirmedRoutes } where confirmedRoutes is a Set of route numbers
+// with confirmed from→to direction (used to validate isTimetable buses)
 async function fetchBusesForRoutes(routes, stationName, destinationName) {
   const results = [];
+  const confirmedRoutes = new Set(); // 方向確認済み路線番号
 
   const tasks = routes.map((route) => async () => {
     try {
@@ -608,6 +611,9 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
             });
           });
           if (!hasValidPair) continue;
+
+          // この方向で出発→目的地の順序が確認された
+          confirmedRoutes.add(route.short);
         }
 
         // Only fetch bus locations after confirming route serves both stations
@@ -622,7 +628,7 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 
   await runWithConcurrency(tasks, 5);
 
-  return results
+  const buses = results
     .filter(r => {
       // Remove passed buses
       if (r.etaMinutes !== null && r.etaMinutes <= 0) return false;
@@ -637,6 +643,8 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
       if (b.etaMinutes === null) return -1;
       return a.etaMinutes - b.etaMinutes;
     });
+
+  return { buses, confirmedRoutes };
 }
 
 // StationCodeキャッシュ（セッション中有効）
@@ -824,7 +832,8 @@ function filterByDestination(dest, routeName, destinationName) {
 // Get airport-bound buses from a station (default behavior)
 export async function getAllBuses(stationName) {
   const airportRoutes = await getAirportRoutes();
-  return fetchBusesForRoutes(airportRoutes, stationName, null);
+  const { buses } = await fetchBusesForRoutes(airportRoutes, stationName, null);
+  return buses;
 }
 
 // Get buses between any two stations, pre-filtered by station cache
@@ -845,10 +854,13 @@ export async function getBusesBetween(fromStation, toStation) {
 
   // リアルタイムデータと接近情報を並列取得
   // 接近情報は目的地フィルタなしで取得（getBusesBetween側でフィルタ）
-  const [realtime, approach] = await Promise.all([
+  const [realtimeResult, approach] = await Promise.all([
     fetchBusesForRoutes(routes, fromStation, toStation),
     getApproachBuses(fromStation, toStation),
   ]);
+  const realtime = realtimeResult.buses;
+  // 方向確認済み路線: GetStationsで出発→目的地の停車順序が確認された路線番号
+  const confirmedRoutes = realtimeResult.confirmedRoutes;
 
   // 接近情報を方向＋目的地でフィルタ
   const filteredApproach = approach.filter(b => {
@@ -858,11 +870,9 @@ export async function getBusesBetween(fromStation, toStation) {
     if (!toStation) return true;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
     // 時刻表由来: 行先名が目的地にマッチしない場合、
-    // バス停キャッシュでその路線が目的地を通るか確認（例: 120番は県庁北口を通るが行先は名護）
+    // GetStationsで停車順序が確認済みの路線のみ通す（バス停キャッシュは方向を区別できないため不使用）
     if (b.isTimetable) {
-      const toRoutes = getCachedRoutesForStation(toStation);
-      if (toRoutes && toRoutes.includes(b.routeShort)) return true;
-      return false;
+      return confirmedRoutes.has(b.routeShort);
     }
     // 接近情報の走行中バス: 出発地に向かっている（stopsAwayあり）なら残す
     // 未出発バスは行先だけでは方向判定できないため除外
