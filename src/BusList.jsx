@@ -152,7 +152,22 @@ export default function BusList({ buses, otherBuses, fromStation }) {
     }));
   });
 
-  const allBuses = [...(buses || []), ...otherAsBusCards];
+  // 重複排除: 同じ会社・路線・時刻のバスは1つだけ表示
+  // isScheduleOnly（GTFS時刻表）を優先（会社情報やリンクが充実）、isTimetable（Timetable API）は除外
+  const otherKeys = new Set(otherAsBusCards.map(b => `${b.company}:${b.routeShort}:${b.scheduledTime}`));
+  const dedupedBuses = (buses || []).filter(b => {
+    if (b.isTimetable && otherKeys.has(`${b.company}:${b.routeShort}:${b.scheduledTime}`)) return false;
+    return true;
+  });
+  // otherAsBusCards内の重複も排除（同路線・同時刻）
+  const seenOther = new Set();
+  const dedupedOther = otherAsBusCards.filter(b => {
+    const key = `${b.routeShort}:${b.scheduledTime}`;
+    if (seenOther.has(key)) return false;
+    seenOther.add(key);
+    return true;
+  });
+  const allBuses = [...dedupedBuses, ...dedupedOther];
   if (allBuses.length === 0) return null;
 
   const running = allBuses.filter(b => !b.notDeparted && !b.isTimetable && !b.isScheduleOnly);
