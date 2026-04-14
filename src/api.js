@@ -857,8 +857,13 @@ export async function getBusesBetween(fromStation, toStation) {
     // 目的地フィルタ: 行先に目的地が含まれているか、行先の途中に目的地があるか
     if (!toStation) return true;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-    // 時刻表由来: 行先名が目的地にマッチしない → 逆方向の可能性が高いため除外
-    if (b.isTimetable) return false;
+    // 時刻表由来: 行先名が目的地にマッチしない場合、
+    // バス停キャッシュでその路線が目的地を通るか確認（例: 120番は県庁北口を通るが行先は名護）
+    if (b.isTimetable) {
+      const toRoutes = getCachedRoutesForStation(toStation);
+      if (toRoutes && toRoutes.includes(b.routeShort)) return true;
+      return false;
+    }
     // 接近情報の走行中バス: 出発地に向かっている（stopsAwayあり）なら残す
     // 未出発バスは行先だけでは方向判定できないため除外
     if (b.stopsAway != null && b.stopsAway > 0) return true;
