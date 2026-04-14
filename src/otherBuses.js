@@ -357,8 +357,8 @@ export function getOtherBusesBetween(fromStation, toStation) {
       if (noBoard.some(s => stationMatch(stops[fromIdx], s))) continue;
       if (toStation && noAlight.some(s => stationMatch(stops[toIdx], s))) continue;
 
-      // 同じルートID+同じ出発バス停の重複を防止
-      const seenKey = `${route.id}:${stops[fromIdx]}`;
+      // 同じルートID+同じ方向の重複を防止
+      const seenKey = `${route.id}:${stops[0]}`;
       if (!seen.has(seenKey)) {
         // 時刻表から次の発車時刻を取得（方向別）
         const routeKey = timetableRouteKey(route.company, route.id, stops);
