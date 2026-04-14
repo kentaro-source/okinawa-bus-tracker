@@ -605,11 +605,12 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
           if (destStations.length === 0) continue;
 
           // Check if ANY combination of dep/dest has correct order (dep before dest)
+          // OrderNoが不明な場合は方向判定不能のため除外（逆方向バス混入防止）
           const hasValidPair = depStations.some(ds => {
             const depIdx = getOrderNo(ds);
             return destStations.some(dest => {
               const destIdx = getOrderNo(dest);
-              return depIdx == null || destIdx == null || depIdx < destIdx;
+              return depIdx != null && destIdx != null && depIdx < destIdx;
             });
           });
           if (!hasValidPair) continue;
