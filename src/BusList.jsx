@@ -1,14 +1,13 @@
 import { getAirportPlatform } from './api'
 
 // Googleマップでバス停にヒットする名前に変換
-function toMapsStopName(name) {
-  if (name === '那覇空港' || name === '旅客ターミナル前')
-    return '国内線旅客ターミナル前';
+function mapsStopName(name) {
+  if (name === '那覇空港' || name === '旅客ターミナル前') return '国内線旅客ターミナル前';
   return name;
 }
 
 function MapLink({ stationName }) {
-  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsStopName(stationName) + 'バス停 沖縄')}`;
   return (
     <a
       className="btn-map-inline"
@@ -74,7 +73,7 @@ function BusCard({ bus, platform }) {
         </div>
         {bus.isScheduleOnly ? (
           <div className="bus-position not-departed">
-            🕐 {bus.scheduledTime}発（位置情報なし）
+            🕐 {bus.scheduledTime}発 <span className="schedule-label">（時刻表）</span>
           </div>
         ) : bus.isTimetable ? (
           <div className="bus-position not-departed">
@@ -104,13 +103,19 @@ function BusCard({ bus, platform }) {
           {platform && <span className="bus-platform">のりば{platform}</span>}
         </div>
         {bus.isScheduleOnly && (
-          <a
-            className="btn-google-maps"
-            href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(toMapsStopName(bus.fromStop) + ' バス停')}&destination=${encodeURIComponent(toMapsStopName(bus.destination) + ' バス停')}&travelmode=transit`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Google Mapsで経路確認
+          <div className="other-bus-note">
+            {bus.company === '東京バス'
+              ? '📡 Google Mapsで遅延情報を確認できます'
+              : bus.company === 'やんばる急行バス'
+              ? <span>📋 時刻表データ（位置情報は<a href="https://yanbaru-bus-navi.com" target="_blank" rel="noopener noreferrer">公式バスロケ</a>で確認）</span>
+              : bus.company === '沖縄エアポートシャトル'
+              ? <span>📋 時刻表データ（位置情報は<a href="http://bus-viewer.jp/okinawa-shuttle/view/searchDistrict.html?lang=0" target="_blank" rel="noopener noreferrer">Bus-Vision</a>で確認）</span>
+              : '📋 時刻表データ（リアルタイム位置情報なし）'}
+          </div>
+        )}
+        {bus.googleMapsUrl && (
+          <a className="btn-google-maps" href={bus.googleMapsUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+            Google Mapsで確認
           </a>
         )}
       </div>
@@ -118,23 +123,66 @@ function BusCard({ bus, platform }) {
   );
 }
 
-export default function BusList({ buses, fromStation }) {
-  const hasBuses = buses && buses.length > 0;
-  if (!hasBuses) return null;
+export default function BusList({ buses, otherBuses, fromStation }) {
+  // otherBusesをBusCard形式に変換して統合
+  const otherAsBusCards = (otherBuses || []).flatMap(route => {
+    if (!route.departures || route.departures.length === 0) return [];
+    return route.departures.slice(0, 2).map((dep, i) => ({
+      routeKey: route.routeId,
+      routeName: route.routeName,
+      routeShort: route.routeId,
+      direction: '',
+      busId: `other-${route.routeId}-${dep.time}-${i}`,
+      company: route.company,
+      position: null,
+      gpsTime: null,
+      scheduledTime: dep.time,
+      scheduledHour: parseInt(dep.time.split(':')[0]),
+      scheduledMinute: parseInt(dep.time.split(':')[1]),
+      etaMinutes: dep.eta,
+      delayMinutes: 0,
+      passed: false,
+      notDeparted: true,
+      destination: route.toStop,
+      speed: null,
+      currentStop: null,
+      stopsAway: null,
+      viaStops: [],
+      isScheduleOnly: true, // 定刻データフラグ
+      googleMapsUrl: route.googleMapsUrl,
+    }));
+  });
 
-  // 出発地が那覇空港系の場合、乗り場番号を表示
-  const isAirport = fromStation === '旅客ターミナル前' || fromStation === '那覇空港'
-    || fromStation === '国内線旅客ターミナル前' || fromStation === '国際線旅客ターミナル前';
+  // 重複排除: 同じ会社・路線・時刻のバスは1つだけ表示
+  // isScheduleOnly（GTFS時刻表）を優先（会社情報やリンクが充実）、isTimetable（Timetable API）は除外
+  const otherKeys = new Set(otherAsBusCards.map(b => `${b.company}:${b.routeShort}:${b.scheduledTime}`));
+  const dedupedBuses = (buses || []).filter(b => {
+    if (b.isTimetable && otherKeys.has(`${b.company}:${b.routeShort}:${b.scheduledTime}`)) return false;
+    return true;
+  });
+  // otherAsBusCards内の重複も排除（同路線・同時刻）
+  const seenOther = new Set();
+  const dedupedOther = otherAsBusCards.filter(b => {
+    const key = `${b.routeShort}:${b.scheduledTime}`;
+    if (seenOther.has(key)) return false;
+    seenOther.add(key);
+    return true;
+  });
+  const allBuses = [...dedupedBuses, ...dedupedOther];
+  if (allBuses.length === 0) return null;
 
-  const running = hasBuses ? buses.filter(b => !b.notDeparted && !b.isTimetable) : [];
-  const waiting = hasBuses ? buses.filter(b => b.notDeparted || b.isTimetable) : [];
+  const running = allBuses.filter(b => !b.notDeparted && !b.isTimetable && !b.isScheduleOnly);
+  const waiting = allBuses.filter(b => b.notDeparted || b.isTimetable || b.isScheduleOnly)
+    .sort((a, b) => (a.etaMinutes ?? 999) - (b.etaMinutes ?? 999));
+
+  const isAirport = fromStation === '那覇空港' || fromStation === '旅客ターミナル前' || fromStation === '国内線旅客ターミナル前' || fromStation === '国際線旅客ターミナル前';
 
   return (
     <div className="bus-list">
       {running.length > 0 && (
         <div className="bus-group">
           <div className="bus-group-header">🚌 走行中</div>
-          {running.map((bus, i) => (
+          {running.map((bus) => (
             <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} platform={isAirport ? getAirportPlatform(bus.routeShort) : null} />
           ))}
         </div>

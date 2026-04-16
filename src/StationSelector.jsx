@@ -61,34 +61,65 @@ function toHiragana(str) {
   );
 }
 
-// 主要バス停のよみがなエイリアス（ひらがな検索用）
+// バス停のよみがなエイリアス（ひらがな検索用）
+// APIバス停にはYomiganaフィールドがあるが、他社バス停や地名検索を補完
 const READING_ALIASES = {
-  'よみたん': '読谷',
+  // 地名・地域
   'なは': '那覇',
+  'なご': '名護',
   'ちゃたん': '北谷',
   'ぎのわん': '宜野湾',
   'うらそえ': '浦添',
-  'なご': '名護',
   'おきなわ': '沖縄',
   'かでな': '嘉手納',
-  'まきし': '牧志',
-  'とまりん': '泊高橋',
-  'ふてんま': '普天間',
-  'こざ': 'コザ',
-  'おもろまち': 'おもろまち',
-  'しゅり': '首里',
   'いとまん': '糸満',
   'とみぐすく': '豊見城',
   'にしはら': '西原',
   'ぎのざ': '宜野座',
   'きん': '金武',
   'おんな': '恩納',
+  'よみたん': '読谷',
+  'なかぐすく': '中城',
+  'ちゃたん': '北谷',
+  'もとぶ': '本部',
+  'なきじん': '今帰仁',
+  'くにがみ': '国頭',
+  'うるま': 'うるま',
+  'とよさき': '豊崎',
+  'せなが': '瀬長',
+  // バス停名
+  'まきし': '牧志',
+  'とまりん': '泊高橋',
+  'ふてんま': '普天間',
+  'こざ': 'コザ',
+  'おもろまち': 'おもろまち',
+  'しゅり': '首里',
   'やふそ': '屋富祖',
   'とまり': '泊',
   'あさひばし': '旭橋',
   'くもじ': '久茂地',
   'けんちょう': '県庁',
   'こくさい': '国際',
+  'あかみね': '赤嶺',
+  'つぼかわ': '壺川',
+  'ふるじま': '古島',
+  'おおひら': '大平',
+  'かかず': '嘉数',
+  'りゅうだい': '琉大',
+  'きしゃば': '喜舎場',
+  'やまざと': '山里',
+  'いけんとう': '池武当',
+  'きょだ': '許田',
+  'せふけ': '世冨慶',
+  'びせ': '備瀬',
+  'こうり': '古宇利',
+  'うんてん': '運天',
+  'なかそね': '仲宗根',
+  'あまそこ': '天底',
+  'くうこう': '空港',
+  'ちゅらうみ': '美ら海',
+  'せそこ': '瀬底',
+  'えめらるど': 'エメラルド',
 };
 
 export default function StationSelector({ onSelect, onClose, favorites, onToggleFavorite, title = 'バス停を選択', showAirportShortcut, onSelectAirport }) {
@@ -103,19 +134,61 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
     inputRef.current?.focus();
   }, []);
 
-  // 他社バス停をallStationsにマージ（重複はスキップ）
+  // 他社バス停のよみがな（APIにYomiganaがない停留所用）
+  const OTHER_STOP_YOMIGANA = {
+    '世冨慶': 'セフケ', '中城': 'ナカグスク', '今帰仁城跡': 'ナキジンジョウセキ',
+    '今帰仁城跡入口': 'ナキジンジョウセキイリグチ', '今帰仁村役場': 'ナキジンソンヤクバ',
+    '仲宗根': 'ナカソネ', '仲尾次（北山高校）': 'ナカオシ', '備瀬フクギ並木入口': 'ビセフクギナミキイリグチ',
+    '北山病院付近': 'ホクザンビョウインフキン', '北谷ゲートウェイ': 'チャタンゲートウェイ',
+    '北部会館': 'ホクブカイカン', '古宇利島の駅ソラハシ': 'コウリジマノエキソラハシ',
+    '古宇利大橋南詰展望所付近': 'コウリオオハシミナミヅメテンボウショフキン',
+    '古宇利大橋のまんなか付近': 'コウリオオハシノマンナカフキン',
+    '古島駅前': 'フルジマエキマエ', '合同庁舎前': 'ゴウドウチョウシャマエ',
+    '名護バスターミナル前': 'ナゴバスターミナルマエ', '名護市役所前': 'ナゴシヤクショマエ',
+    '喜舎場': 'キシャバ', '嘉数': 'カカズ', '国際通り入口': 'コクサイドオリイリグチ',
+    '壺川駅': 'ツボカワエキ', '大平': 'オオヒラ', '天底公民館': 'アマソココウミンカン',
+    '山里': 'ヤマザト', '池武当': 'イケントウ', '泊高橋': 'トマリタカハシ',
+    '瀬長島ホテル ウミカジテラス': 'セナガジマホテルウミカジテラス',
+    '瀬長島ホテル　ウミカジテラス': 'セナガジマホテルウミカジテラス',
+    '琉大入口': 'リュウダイイリグチ', '県庁北口': 'ケンチョウキタグチ',
+    '糸満市役所': 'イトマンシヤクショ', '記念公園前': 'キネンコウエンマエ',
+    '赤嶺駅': 'アカミネエキ', '運天原': 'ウンテンバル', '運天港': 'ウンテンコウ',
+    '道の駅いとまん': 'ミチノエキイトマン', '道の駅許田': 'ミチノエキキョダ',
+    '那覇商業高校（松山入口）': 'ナハショウギョウコウコウ', '旭橋': 'アサヒバシ',
+    '旭橋駅・那覇バスターミナル前': 'アサヒバシエキナハバスターミナルマエ',
+    '本部博物館前': 'モトブハクブツカンマエ', '本部港': 'モトブコウ',
+    '本部高校入口': 'モトブコウコウイリグチ',
+    '沖縄美ら海水族館（記念公園前）': 'オキナワチュラウミスイゾクカン',
+    'おんなの駅（なかゆくい市場前）': 'オンナノエキナカユクイイチバマエ',
+    'ハレクラニ沖縄前（伊武部希望ヶ丘入口）': 'ハレクラニオキナワマエ',
+    'とまりん前（泊高橋）': 'トマリンマエトマリタカハシ',
+    '琉球ホテル＆リゾート名城ビーチ': 'リュウキュウホテルナシロビーチ',
+  };
+
+  // 他社バス停をallStationsにマージ（同名バス停には路線情報を追加）
   function mergeOtherStops(stations) {
-    const nameSet = new Set(stations.map(s => s.name));
-    const merged = [...stations];
+    const nameMap = new Map();
+    const merged = stations.map(s => {
+      const copy = { ...s, routes: [...s.routes] };
+      nameMap.set(s.name, copy);
+      return copy;
+    });
     for (const [name, info] of ALL_OTHER_STOPS) {
-      if (!nameSet.has(name)) {
+      const companies = Array.from(info.companies);
+      const existing = nameMap.get(name);
+      if (existing) {
+        // 既存バス停に他社の会社名を追加
+        for (const c of companies) {
+          if (!existing.routes.includes(c)) existing.routes.push(c);
+        }
+      } else {
         merged.push({
           name,
           fullName: name,
-          yomigana: '',
-          lat: null,
-          lng: null,
-          routes: Array.from(info.companies),
+          yomigana: OTHER_STOP_YOMIGANA[name] || '',
+          lat: info.lat,
+          lng: info.lng,
+          routes: companies,
           isOtherBus: true,
         });
       }
@@ -400,7 +473,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
                   <div key={s.name} className="station-item">
                     <button className="station-btn" onClick={() => onSelect(s.name)}>
                       <span className="station-name">{s.name}</span>
-                      <span className="station-routes">{s.isOtherBus ? s.routes.join(' ') : s.routes.map(r => r + '番').join(' ')}</span>
+                      <span className="station-routes">{s.routes.map(r => /^\d+$/.test(r) ? r + '番' : r).join(' ')}</span>
                     </button>
                     <button
                       className={`btn-fav-small ${favorites.includes(s.name) ? 'is-fav' : ''}`}

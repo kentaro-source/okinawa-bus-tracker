@@ -24,8 +24,14 @@ function toDisplayName(name) {
   if (name === '旅客ターミナル前') return '国内線旅客ターミナル前';
   return name;
 }
+function mapsStopName(name) {
+  if (name === '那覇空港' || name === '旅客ターミナル前' || name === '国内線旅客ターミナル前') return '国内線旅客ターミナル前';
+  if (name === '国際線旅客ターミナル前') return '国際線旅客ターミナル前';
+  return name;
+}
+
 function googleMapsUrl(stationName) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(stationName + 'バス停 沖縄')}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapsStopName(stationName) + 'バス停 沖縄')}`;
 }
 
 function loadFavorites() {
@@ -60,7 +66,7 @@ function App() {
     toInternalName(localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル')
   );
   const [buses, setBuses] = useState([]);
-  // otherBusesは内部変数（BusCard形式に変換してbusesにマージ）
+  const [otherBuses, setOtherBuses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
@@ -80,42 +86,14 @@ function App() {
         setLastUpdate(new Date());
         return;
       }
-      // 他社バス時刻表（静的データ）→ BusCard形式に変換
-      const otherRoutes = getOtherBusesBetween(from, to);
-      const scheduleBuses = [];
-      for (const route of otherRoutes) {
-        for (const dep of route.departures || []) {
-          scheduleBuses.push({
-            routeKey: `schedule-${route.routeId}`,
-            routeShort: route.routeId,
-            routeName: route.routeName,
-            busId: `schedule-${route.routeId}-${dep.time}`,
-            company: route.company,
-            destination: route.toStop,
-            etaMinutes: dep.eta,
-            scheduledTime: dep.time,
-            scheduledHour: parseInt(dep.time.split(':')[0]),
-            scheduledMinute: parseInt(dep.time.split(':')[1]),
-            delayMinutes: 0,
-            notDeparted: false,
-            isTimetable: true,
-            isScheduleOnly: true,
-            fromStop: route.fromStop,
-            currentStop: null,
-            stopsAway: null,
-            viaStops: [],
-            direction: '',
-            passed: false,
-          });
-        }
-      }
-      const [data, tokyoLive] = await Promise.all([
-        getBusesBetween(from, to),
-        getTokyoBusLive(from, to),
-      ]);
+      // 他社バス（静的データ、即時）
+      setOtherBuses(getOtherBusesBetween(from, to));
+      const data = await getBusesBetween(from, to);
+      // 東京バスGTFS-RTは一時停止（ルート方向判定・座標マッチング要改善）
+      // const tokyoLive = await getTokyoBusLive(from, to);
 
       // 前回表示されていたバスが今回消えた場合、最大2サイクル（90秒）維持（瞬断防止）
-      const allData = [...data, ...tokyoLive, ...scheduleBuses];
+      const allData = data;
       const newKeys = new Set(allData.map(b => b.busId));
       const retained = prevBusesRef.current.filter(b =>
         !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && (b._retainCount || 0) < 2
@@ -257,7 +235,7 @@ function App() {
           <div className="header-update">
             最終更新: {lastUpdate.toLocaleTimeString('ja-JP')}
             <button className="btn-info" onClick={() => setShowInfo(true)} title="このアプリについて">？</button>
-            <a className="btn-gmaps-header" href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(toDisplayName(station) + 'バス停 沖縄')}&destination=${encodeURIComponent(toDisplayName(destination) + 'バス停 沖縄')}&travelmode=transit`} target="_blank" rel="noopener noreferrer">Googleで乗換案内</a>
+            <a className="btn-transit-link" href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(toDisplayName(station) + 'バス停 沖縄')}&destination=${encodeURIComponent(toDisplayName(destination) + 'バス停 沖縄')}&travelmode=transit`} target="_blank" rel="noopener noreferrer">Googleで乗換案内</a>
           </div>
         )}
       </header>
@@ -299,7 +277,7 @@ function App() {
             </a>
           </div>
         )}
-        <BusList buses={filteredBuses} fromStation={station} />
+        <BusList buses={filteredBuses} otherBuses={otherBuses} fromStation={station} />
       </main>
 
       <footer className="footer">

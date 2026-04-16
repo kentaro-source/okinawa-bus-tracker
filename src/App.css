@@ -178,6 +178,13 @@ body {
   color: var(--text2);
 }
 
+.btn-transit-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  margin-left: auto;
+}
+
 .btn-refresh {
   background: none;
   border: 1px solid var(--bg3);
@@ -435,6 +442,21 @@ body {
   margin-top: 2px;
   font-size: 11px;
   color: var(--text2);
+  flex-wrap: wrap;
+}
+
+.schedule-label {
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.bus-platform {
+  background: var(--accent);
+  color: var(--bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 10px;
 }
 
 /* Footer */
@@ -708,6 +730,12 @@ body {
 .bus-card.other-bus {
   border-left-color: var(--accent);
   opacity: 0.85;
+}
+
+.other-bus-note {
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
 }
 
 .bus-live {

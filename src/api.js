@@ -12,6 +12,7 @@ const STATION_ALIASES = {
 };
 
 // 那覇空港の乗り場番号（出発のりば）
+// ソース: naha-airport.co.jp, OTTOP API
 const NAHA_AIRPORT_PLATFORMS = {
   // のりば1: 東京バス、カリー観光、沖縄エアポートシャトル
   'TK01': '1', 'TK02': '1', 'TK03': '1', 'TK04': '1', 'TK05': '1', 'TK06': '1',
@@ -26,6 +27,7 @@ const NAHA_AIRPORT_PLATFORMS = {
   '83': '3', '190': '4',
 };
 
+// 路線番号から那覇空港の乗り場番号を取得
 export function getAirportPlatform(routeShort) {
   if (!routeShort) return null;
   return NAHA_AIRPORT_PLATFORMS[routeShort] || null;
@@ -340,18 +342,22 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
       continue;
     }
 
-    // 目的地が指定されている場合、この便のスケジュールに目的地があるか確認
-    // （AllStationsでは通るが、個別便では通らないケースを除外）
-    if (destinationName) {
-      const destInSchedule = schedules.some(s => matchStation(destinationName, s.Station.Name));
-      if (!destInSchedule) continue;
-    }
-
     // Find when bus is scheduled at our station (using base name matching + aliases)
     const stationSchedule = schedules.find(s => matchStation(stationName, s.Station.Name));
 
     // If this route doesn't pass through our station (in this direction), skip
     if (!stationSchedule) continue;
+
+    // 目的地が指定されている場合、出発地より後に目的地があるか確認
+    // （スケジュール上で出発地→目的地の順序を保証し、逆方向バスを除外）
+    if (destinationName) {
+      const depOrder = stationSchedule.OrderNo;
+      const destSchedule = schedules.find(s => matchStation(destinationName, s.Station.Name));
+      if (!destSchedule) continue;
+      const destOrder = destSchedule.OrderNo;
+      // OrderNoが両方判明している場合、目的地が出発地より後であることを確認
+      if (depOrder != null && destOrder != null && destOrder <= depOrder) continue;
+    }
 
     // Check if bus already passed our station (match same station as schedule)
     const matchedStationName = stationSchedule.Station.Name;
@@ -595,8 +601,13 @@ function getCachedRoutesForStation(stationName) {
 }
 
 // Fetch buses for a given set of routes, filtered by station name
+// Returns { buses, confirmedRoutes } where confirmedRoutes is a Set of route numbers
+// with confirmed from→to direction (used to validate isTimetable buses)
 async function fetchBusesForRoutes(routes, stationName, destinationName) {
   const results = [];
+  // 方向確認済み路線: routeShort → コース終点名のSet
+  // isTimetableバスのdestinationがこの終点名にマッチすれば正しい方向と判定
+  const confirmedRouteEnds = new Map();
 
   const tasks = routes.map((route) => async () => {
     try {
@@ -625,14 +636,22 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
           if (destStations.length === 0) continue;
 
           // Check if ANY combination of dep/dest has correct order (dep before dest)
+          // OrderNoが不明な場合は方向判定不能のため除外（逆方向バス混入防止）
           const hasValidPair = depStations.some(ds => {
             const depIdx = getOrderNo(ds);
             return destStations.some(dest => {
               const destIdx = getOrderNo(dest);
-              return depIdx == null || destIdx == null || depIdx < destIdx;
+              return depIdx != null && destIdx != null && depIdx < destIdx;
             });
           });
           if (!hasValidPair) continue;
+
+          // この方向で出発→目的地の順序が確認された → コースの終点名を記録
+          const lastStation = stations[stations.length - 1];
+          if (lastStation) {
+            if (!confirmedRouteEnds.has(route.short)) confirmedRouteEnds.set(route.short, new Set());
+            confirmedRouteEnds.get(route.short).add(getBaseName(lastStation.Name));
+          }
         }
 
         // Only fetch bus locations after confirming route serves both stations
@@ -647,7 +666,7 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
 
   await runWithConcurrency(tasks, 5);
 
-  return results
+  const buses = results
     .filter(r => {
       // Remove passed buses
       if (r.etaMinutes !== null && r.etaMinutes <= 0) return false;
@@ -662,6 +681,8 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
       if (b.etaMinutes === null) return -1;
       return a.etaMinutes - b.etaMinutes;
     });
+
+  return { buses, confirmedRouteEnds };
 }
 
 // StationCodeキャッシュ（セッション中有効）
@@ -718,7 +739,7 @@ async function getApproachBuses(stationName, destinationName) {
     const stationSid = result?.stationSid || null;
 
     // 接近情報があればフォーマット
-    const formatted = buses.length > 0 ? formatApproachBuses(buses, destinationName) : [];
+    const formatted = buses.length > 0 ? formatApproachBuses(buses) : [];
 
     // 接近情報が少ない場合（始発停等）のみ時刻表を補完
     if (formatted.length < 3 && stationSid) {
@@ -736,10 +757,9 @@ async function getApproachBuses(stationName, destinationName) {
   }
 }
 
-// 接近情報をBusList形式に変換（フィルタはgetBusesBetween側で実施）
-function formatApproachBuses(buses, destinationName) {
+// 接近情報をBusList形式に変換（目的地フィルタはgetBusesBetween側で実施）
+function formatApproachBuses(buses) {
   return buses
-    .filter(b => filterByDestination(b.destination, b.routeName, destinationName))
     .map(b => {
       const timeParts = b.scheduledTime?.match(/^(\d+):(\d+)$/);
       const hour = timeParts ? parseInt(timeParts[1]) : null;
@@ -850,7 +870,8 @@ function filterByDestination(dest, routeName, destinationName) {
 // Get airport-bound buses from a station (default behavior)
 export async function getAllBuses(stationName) {
   const airportRoutes = await getAirportRoutes();
-  return fetchBusesForRoutes(airportRoutes, stationName, null);
+  const { buses } = await fetchBusesForRoutes(airportRoutes, stationName, null);
+  return buses;
 }
 
 // Get buses between any two stations, pre-filtered by station cache
@@ -871,10 +892,27 @@ export async function getBusesBetween(fromStation, toStation) {
 
   // リアルタイムデータと接近情報を並列取得
   // 接近情報は目的地フィルタなしで取得（getBusesBetween側でフィルタ）
-  const [realtime, approach] = await Promise.all([
+  const [realtimeResult, approach] = await Promise.all([
     fetchBusesForRoutes(routes, fromStation, toStation),
     getApproachBuses(fromStation, toStation),
   ]);
+  // リアルタイムバスの逆方向フィルタ（processBusesで漏れたケースをキャッチ）
+  // バスの行先が出発地方面なら逆方向、目的地方面でなければ逆方向の可能性
+  const realtime = realtimeResult.buses.filter(b => {
+    if (!toStation || !b.destination) return true;
+    // 行先が出発地にマッチ → 逆方向
+    if (matchStation(fromStation, b.destination)) return false;
+    // 行先が目的地にマッチ → 正方向
+    if (filterByDestination(b.destination, b.routeName, toStation)) return true;
+    // 行先が目的地にマッチしないリアルタイムバス:
+    // 確認済みコースの終点にマッチするかで方向判定
+    const ends = realtimeResult.confirmedRouteEnds.get(b.routeShort);
+    if (!ends) return true; // 終点データなし → processBusesの判定を信頼
+    const busDest = getBaseName(b.destination || '');
+    return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
+  });
+  // 方向確認済み路線: GetStationsで出発→目的地の停車順序が確認された路線 + 終点名
+  const confirmedRouteEnds = realtimeResult.confirmedRouteEnds;
 
   // 接近情報を方向＋目的地でフィルタ
   const filteredApproach = approach.filter(b => {
@@ -883,18 +921,36 @@ export async function getBusesBetween(fromStation, toStation) {
     // 目的地フィルタ: 行先に目的地が含まれているか、行先の途中に目的地があるか
     if (!toStation) return true;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-    // 時刻表由来: 行き先名に目的地が含まれないが、途中で通る可能性あり
-    // → キャッシュで路線が目的地を通るか確認 + 停留所順序で方向判定
+    // 時刻表由来: 行先名が目的地にマッチしない場合、
+    // GetStationsで停車順序が確認済みの路線かつ、バスの行先が確認済みコースの終点にマッチする場合のみ通す
+    // （同じ路線でも逆方向のバスを除外するため、終点名で方向を判定）
     if (b.isTimetable) {
-      const destRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
-      if (!destRoutes || !destRoutes.includes(b.routeShort)) return false;
-      // 方向判定: fromの順序 < toの順序なら同方向
-      const fromOrder = getRouteOrderAtStation(fromStation, b.routeShort);
-      const toOrder = getRouteOrderAtStation(toStation, b.routeShort);
-      if (fromOrder != null && toOrder != null) {
-        return toOrder > fromOrder; // toがfromより後 = 同方向
+      const ends = confirmedRouteEnds.get(b.routeShort);
+      if (!ends) return false;
+      const busDest = getBaseName(b.destination || '');
+      return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
+    }
+    // 接近情報の走行中バス: confirmedRouteEndsで方向を確認
+    // （Approach APIは方向関係なく全バスを返すため、行先が正方向か確認が必要）
+    if (b.stopsAway != null && b.stopsAway > 0) {
+      const ends = confirmedRouteEnds.get(b.routeShort);
+      if (ends) {
+        const busDest = getBaseName(b.destination || '');
+        if (!Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest))) {
+          return false; // 確認済みコースの終点にマッチしない → 逆方向
+        }
       }
-      return true; // 順序不明ならフォールバックで表示
+      return true;
+    }
+    if (!b.notDeparted && b.currentStop) {
+      const ends = confirmedRouteEnds.get(b.routeShort);
+      if (ends) {
+        const busDest = getBaseName(b.destination || '');
+        if (!Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest))) {
+          return false;
+        }
+      }
+      return true;
     }
     return false;
   });
