@@ -85,6 +85,7 @@
 
 ## 未解決の課題
 - 祝日便（例: 120番）: 平日に祝日便が走っていたケースあり。原因・対策は保留
+- Timetable APIカバレッジ: busnavi-okinawa.comのTimetable APIに含まれない路線あり（117番等）。SUPPLEMENTAL_DEPARTURESで手動補完中。時刻改正時に更新が必要
 
 ## 実装済みの仕様・設計判断
 - 他社バス（バスナビ沖縄API対象外）: 時刻表ベースで統合
@@ -99,10 +100,12 @@
   - DIRECTION_META: 各方向の始発・終着バス停名、方向マッチングに使用
   - flags: 1=乗車専用(降車不可)、2=降車専用(乗車不可)
   - 30分以内の便のみ表示、次の便がない路線は非表示
-- 始発停の時刻表API補完済み（getTimetableBuses）
+- 始発停の時刻表API補完済み（getTimetableBuses）— 接近情報の件数に関わらず常時照会
+- SUPPLEMENTAL_DEPARTURES: Timetable APIに含まれない路線の手動補完（117番空港発等）
+- 逆方向フィルタ: Approach APIは方向関係なく全バスを返すため、confirmedRouteEnds（GetStationsで確認済みの正方向コース終点名）で方向を検証。リアルタイムバス・接近情報バス・時刻表バス全てに適用
 - ETA: 出発地到着基準。計算: actualArrival + remainingScheduledMinutes - now
 - 遅延表示: 遅れのみ（早発は非表示）、15停留所以内に限定
-- 逆方向フィルタ: 行先が出発地と一致→除外。isTimetableバスは行先が目的地にマッチしなければ除外
+- 逆方向フィルタ（旧）: 行先が出発地と一致→除外。processBuses内でOrderNo順序チェック
 - Google Mapsリンク: 全社統一で出発バス停→目的バス停の経路案内
 - ふりがな検索: READING_ALIASES（55件）+ 他社バス停にyomigana付与
 - 那覇空港の乗り場番号: 実装済み（メイン4社+他社バス）
