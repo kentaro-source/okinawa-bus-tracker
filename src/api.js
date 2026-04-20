@@ -719,6 +719,47 @@ async function getApproachBuses(stationName, destinationName) {
     if (stationSid) {
       const busStopCode = stationCode + '0000';
       const timetable = await getTimetableBuses(stationSid, busStopCode, destinationName);
+
+      // Timetable APIに含まれない路線を補完データから追加
+      const supplemental = SUPPLEMENTAL_DEPARTURES[stationCode];
+      if (supplemental) {
+        const timetableRoutes = new Set(timetable.map(t => t.routeShort));
+        const now = new Date();
+        for (const route of supplemental) {
+          if (timetableRoutes.has(route.routeNumber)) continue; // API側にあれば不要
+          for (const time of route.times) {
+            const [h, m] = time.split(':').map(Number);
+            const depDate = new Date();
+            depDate.setHours(h, m, 0, 0);
+            const etaMinutes = Math.round((depDate - now) / 60000);
+            if (etaMinutes < -5 || etaMinutes > 60) continue; // 5分前〜60分先
+            timetable.push({
+              routeKey: route.routeNumber,
+              routeName: route.routeName,
+              routeShort: route.routeNumber,
+              direction: '',
+              busId: `supp-${route.routeNumber}-${time}`,
+              company: route.company,
+              position: null,
+              gpsTime: null,
+              scheduledTime: time,
+              scheduledHour: h,
+              scheduledMinute: m,
+              etaMinutes,
+              delayMinutes: 0,
+              passed: false,
+              notDeparted: true,
+              destination: route.destination,
+              speed: null,
+              currentStop: null,
+              stopsAway: null,
+              viaStops: [],
+              isTimetable: true,
+            });
+          }
+        }
+      }
+
       const approachKeys = new Set(formatted.map(b => `${b.routeShort}-${b.scheduledTime}`));
       const uniqueTimetable = timetable.filter(b => !approachKeys.has(`${b.routeShort}-${b.scheduledTime}`));
       return [...formatted, ...uniqueTimetable];
@@ -777,6 +818,20 @@ function formatApproachBuses(buses) {
       };
     });
 }
+
+// Timetable APIに含まれない路線の補完データ（公式時刻表より）
+// キー: stationCode, 値: [{routeNumber, routeName, destination, company, times: [HH:MM, ...]}]
+const SUPPLEMENTAL_DEPARTURES = {
+  '1602': [ // 国内線旅客ターミナル前（那覇空港）
+    {
+      routeNumber: '117',
+      routeName: '117番 高速バス（美ら海直行）',
+      destination: 'オリオンホテルモトブリゾート＆スパ（終点）',
+      company: '琉球バス交通 沖縄バス',
+      times: ['06:45','07:30','08:25','09:20','09:45','10:15','11:25','12:00','12:20','12:50','13:40','15:15','15:55','16:15','16:40','18:10','18:35','19:20','20:15'],
+    },
+  ],
+};
 
 // 時刻表データをBusList形式に変換（始発停フォールバック）
 async function getTimetableBuses(stationSid, busStopCode, destinationName) {
