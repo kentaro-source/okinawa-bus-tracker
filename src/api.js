@@ -714,8 +714,9 @@ async function getApproachBuses(stationName, destinationName) {
     // 接近情報があればフォーマット
     const formatted = buses.length > 0 ? formatApproachBuses(buses) : [];
 
-    // 接近情報が少ない場合（始発停等）のみ時刻表を補完
-    if (formatted.length < 3 && stationSid) {
+    // 時刻表を常に補完（接近情報にない路線をカバー）
+    // 例: 始発停が1つ前の路線は接近情報に出ないが時刻表には含まれる
+    if (stationSid) {
       const busStopCode = stationCode + '0000';
       const timetable = await getTimetableBuses(stationSid, busStopCode, destinationName);
       const approachKeys = new Set(formatted.map(b => `${b.routeShort}-${b.scheduledTime}`));
