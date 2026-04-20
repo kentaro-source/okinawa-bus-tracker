@@ -720,14 +720,14 @@ async function getApproachBuses(stationName, destinationName) {
       const busStopCode = stationCode + '0000';
       const timetable = await getTimetableBuses(stationSid, busStopCode, destinationName);
 
-      // Timetable APIに含まれない路線を補完データから追加
+      // Timetable APIの欠落を補完データで埋める（API側にある時刻は重複追加しない）
       const supplemental = SUPPLEMENTAL_DEPARTURES[stationCode];
       if (supplemental) {
-        const timetableRoutes = new Set(timetable.map(t => t.routeShort));
+        const timetableTimes = new Set(timetable.map(t => `${t.routeShort}-${t.scheduledTime}`));
         const now = new Date();
         for (const route of supplemental) {
-          if (timetableRoutes.has(route.routeNumber)) continue; // API側にあれば不要
           for (const time of route.times) {
+            if (timetableTimes.has(`${route.routeNumber}-${time}`)) continue; // この時刻はAPI側にある
             const [h, m] = time.split(':').map(Number);
             const depDate = new Date();
             depDate.setHours(h, m, 0, 0);

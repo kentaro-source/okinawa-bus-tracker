@@ -85,7 +85,12 @@
 
 ## 未解決の課題
 - 祝日便（例: 120番）: 平日に祝日便が走っていたケースあり。原因・対策は保留
-- Timetable APIカバレッジ: busnavi-okinawa.comのTimetable APIに含まれない路線あり（117番等）。SUPPLEMENTAL_DEPARTURESで手動補完中。時刻改正時に更新が必要
+- Timetable APIカバレッジ（調査完了 2026-04-20）:
+  - stationSidがプラットフォーム/方向を決定し、Approach APIは1バス停につき1つしか返さない
+  - 空港: 15路線（出発）、117番含む（ただしAPI側8本/実際19本 → SUPPLEMENTAL補完）✅
+  - 県庁北口: 45路線（出発）✅
+  - 那覇BT: 7路線（到着のみ）❌ — stationSidが「おりばA」（降車場）のため出発時刻表が取れない
+  - 那覇BTの出発stationSid取得手段なし（API制限）。OTTOP GTFS static移行で解決可能
 
 ## 実装済みの仕様・設計判断
 - 他社バス（バスナビ沖縄API対象外）: 時刻表ベースで統合
@@ -101,7 +106,7 @@
   - flags: 1=乗車専用(降車不可)、2=降車専用(乗車不可)
   - 30分以内の便のみ表示、次の便がない路線は非表示
 - 始発停の時刻表API補完済み（getTimetableBuses）— 接近情報の件数に関わらず常時照会
-- SUPPLEMENTAL_DEPARTURES: Timetable APIに含まれない路線の手動補完（117番空港発等）
+- SUPPLEMENTAL_DEPARTURES: Timetable APIの欠落便を個別時刻レベルで補完（API側に同時刻があればスキップ）。117番空港発は19本中11本がAPI未収録のため補完必須
 - 逆方向フィルタ: Approach APIは方向関係なく全バスを返すため、confirmedRouteEnds（GetStationsで確認済みの正方向コース終点名）で方向を検証。リアルタイムバス・接近情報バス・時刻表バス全てに適用
 - ETA: 出発地到着基準。計算: actualArrival + remainingScheduledMinutes - now
 - 遅延表示: 遅れのみ（早発は非表示）、15停留所以内に限定

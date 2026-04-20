@@ -378,6 +378,7 @@ export async function onRequest(context) {
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
+    const goalStaCode = url.searchParams.get('goalStaCode') || '';
     const res = await fetch('https://www.busnavi-okinawa.com/top/Approach/Result', {
       method: 'POST',
       headers: {
@@ -387,7 +388,7 @@ export async function onRequest(context) {
       body: JSON.stringify({
         selectLang: 'ja',
         startStaCode: stationCode,
-        goalStaCode: '',
+        goalStaCode,
         listSortMode: 0,
       }),
     });
