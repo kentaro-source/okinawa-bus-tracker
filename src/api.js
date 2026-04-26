@@ -907,7 +907,7 @@ export async function getBusesBetween(fromStation, toStation) {
     // 行先が目的地にマッチしないリアルタイムバス:
     // 確認済みコースの終点にマッチするかで方向判定
     const ends = realtimeResult.confirmedRouteEnds.get(b.routeShort);
-    if (!ends) return true; // 終点データなし → processBusesの判定を信頼
+    if (!ends) return false;
     const busDest = getBaseName(b.destination || '');
     return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
   });
