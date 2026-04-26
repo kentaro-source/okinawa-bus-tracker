@@ -116,7 +116,7 @@
 - ETA: 出発地到着基準。計算: actualArrival + remainingScheduledMinutes - now
 - 遅延表示: 遅れのみ（早発は非表示）、15停留所以内に限定
 - 未出発バスの異常データ: 定刻から2時間以上経過した未出発バスは非表示（APIの残骸対策）
-- 逆方向フィルタ: 行先が出発地と一致→除外。Approach/isTimetableバスはconfirmedRouteEndsで方向判定
+- 逆方向フィルタ: 行先が出発地と一致→除外。confirmedRouteEndsにない路線はApproach・リアルタイム両方で除外（2026-04-26修正）
 - Google Mapsリンク: 全社統一で出発バス停→目的バス停の経路案内。ヘッダーに「Googleで乗換案内」リンク
 - Google Mapsリンクのバス停名変換: mapsStopName()で「那覇空港」→「国内線旅客ターミナル前」に変換
 - ふりがな検索: READING_ALIASES（55件）+ 他社バス停にyomigana付与
