@@ -11,29 +11,6 @@ const STATION_ALIASES = {
   '那覇バスターミナル': ['旭橋', 'バスターミナル前'],
 };
 
-// 那覇空港の乗り場番号（出発のりば）
-// ソース: naha-airport.co.jp, OTTOP API
-const NAHA_AIRPORT_PLATFORMS = {
-  // のりば1: 東京バス、カリー観光
-  'TK01': '1', 'TK02': '1', 'TK03': '1', 'TK04': '1', 'TK05': '1', 'TK06': '1',
-  '北谷ライナー': '1',
-  // のりば2: 高速バス、やんばる急行
-  '111': '2', '117': '2',
-  'YKB888': '2',
-  // のりば3: 空港路線（メイン4社）
-  '23': '3', '26': '3', '99': '3', '113': '3', '120': '3', '125': '3', '132': '3', '143': '3', '152': '3',
-  // のりば4
-  '83': '3', '190': '4',
-  // 沖縄エアポートシャトル
-  'OAS': '1',
-};
-
-// 路線番号から那覇空港の乗り場番号を取得
-export function getAirportPlatform(routeShort) {
-  if (!routeShort) return null;
-  return NAHA_AIRPORT_PLATFORMS[routeShort] || null;
-}
-
 // 逆引き: API上の正式名 → 内部統一名（エイリアス検索で使用）
 const STATION_REVERSE_ALIASES = {
   '国内線旅客ターミナル前': '那覇空港',
@@ -925,62 +902,35 @@ export async function getBusesBetween(fromStation, toStation) {
     fetchBusesForRoutes(routes, fromStation, toStation),
     getApproachBuses(fromStation, toStation),
   ]);
-  // リアルタイムバスの逆方向フィルタ（processBusesで漏れたケースをキャッチ）
-  // バスの行先が出発地方面なら逆方向、目的地方面でなければ逆方向の可能性
-  const realtime = realtimeResult.buses.filter(b => {
-    if (!toStation || !b.destination) return true;
-    // 行先が出発地にマッチ → 逆方向
-    if (matchStation(fromStation, b.destination)) return false;
-    // 行先が目的地にマッチ → 正方向
-    if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-    // 行先が目的地にマッチしないリアルタイムバス:
-    // 確認済みコースの終点にマッチするかで方向判定
-    const ends = realtimeResult.confirmedRouteEnds.get(b.routeShort);
-    if (!ends) return true; // 終点データなし → processBusesの判定を信頼
-    const busDest = getBaseName(b.destination || '');
-    return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
-  });
   // 方向確認済み路線: GetStationsで出発→目的地の停車順序が確認された路線 + 終点名
   const confirmedRouteEnds = realtimeResult.confirmedRouteEnds;
 
-  // 接近情報を方向＋目的地でフィルタ
-  const filteredApproach = approach.filter(b => {
-    // 逆方向フィルタ: 行先が出発地と同じ＝出発地に到着するバス＝逆方向
-    if (fromStation && b.destination && matchStation(fromStation, b.destination)) return false;
-    // 目的地フィルタ: 行先に目的地が含まれているか、行先の途中に目的地があるか
-    if (!toStation) return true;
+  // 共通方向検証ロジック: バスが出発→目的地の正方向か判定
+  // - 行先が出発地と一致 → 逆方向（false）
+  // - 行先が目的地に一致 → 正方向（true）
+  // - 上記いずれでもない → confirmedRouteEndsの終点名で方向確認
+  // - confirmedRouteEndsに登録なし（出発→目的地の順序が確認できない路線） → 除外（false）
+  const isCorrectDirection = (b) => {
+    if (!toStation || !b.destination) return true;
+    if (matchStation(fromStation, b.destination)) return false;
     if (filterByDestination(b.destination, b.routeName, toStation)) return true;
-    // 時刻表由来: 行先名が目的地にマッチしない場合、
-    // GetStationsで停車順序が確認済みの路線かつ、バスの行先が確認済みコースの終点にマッチする場合のみ通す
-    // （同じ路線でも逆方向のバスを除外するため、終点名で方向を判定）
-    if (b.isTimetable) {
-      const ends = confirmedRouteEnds.get(b.routeShort);
-      if (!ends) return false;
-      const busDest = getBaseName(b.destination || '');
-      return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
-    }
-    // 接近情報の走行中バス: confirmedRouteEndsで方向を確認
-    // （Approach APIは方向関係なく全バスを返すため、行先が正方向か確認が必要）
-    if (b.stopsAway != null && b.stopsAway > 0) {
-      const ends = confirmedRouteEnds.get(b.routeShort);
-      if (ends) {
-        const busDest = getBaseName(b.destination || '');
-        if (!Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest))) {
-          return false; // 確認済みコースの終点にマッチしない → 逆方向
-        }
-      }
-      return true;
-    }
-    if (!b.notDeparted && b.currentStop) {
-      const ends = confirmedRouteEnds.get(b.routeShort);
-      if (ends) {
-        const busDest = getBaseName(b.destination || '');
-        if (!Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest))) {
-          return false;
-        }
-      }
-      return true;
-    }
+    const ends = confirmedRouteEnds.get(b.routeShort);
+    if (!ends) return false;
+    const busDest = getBaseName(b.destination || '');
+    return Array.from(ends).some(end => matchStation(busDest, end) || matchStation(end, busDest));
+  };
+
+  // リアルタイムバスの方向検証（processBusesで漏れたケースをキャッチ）
+  const realtime = realtimeResult.buses.filter(isCorrectDirection);
+
+  // 接近情報を方向＋目的地でフィルタ
+  // - 時刻表由来: 方向検証必須
+  // - 走行中（stopsAway>0 または currentStop有り）: 方向検証必須
+  // - それ以外: 除外
+  const filteredApproach = approach.filter(b => {
+    if (b.isTimetable) return isCorrectDirection(b);
+    if (b.stopsAway != null && b.stopsAway > 0) return isCorrectDirection(b);
+    if (!b.notDeparted && b.currentStop) return isCorrectDirection(b);
     return false;
   });
 

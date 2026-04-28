@@ -128,6 +128,7 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
   const [loading, setLoading] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
   const [nearbyStations, setNearbyStations] = useState(null); // [{station, distance}]
+  const [geoAccuracy, setGeoAccuracy] = useState(null); // GPS精度（メートル）
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -344,9 +345,11 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
 
     setGeoLoading(true);
     setNearbyStations(null);
+    setGeoAccuracy(null);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const { latitude, longitude } = pos.coords;
+        const { latitude, longitude, accuracy } = pos.coords;
+        setGeoAccuracy(accuracy);
         const withDistance = allStations
           .filter(s => s.lat && s.lng)
           .map(s => ({
@@ -435,6 +438,12 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
         {nearbyStations && (
           <div className="modal-section">
             <h3>📍 最寄りバス停</h3>
+            {geoAccuracy != null && (
+              <div className={`geo-accuracy ${geoAccuracy > 100 ? 'warn' : ''}`}>
+                GPS精度: ±{Math.round(geoAccuracy)}m
+                {geoAccuracy > 100 && '（精度が低い: WiFi/基地局測位の可能性。GPSが効く場所で再取得してください）'}
+              </div>
+            )}
             {nearbyStations.map(({ station, distance }) => (
               <div key={station.name} className="station-item">
                 <button className="station-btn" onClick={() => onSelect(station.name)}>

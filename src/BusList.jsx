@@ -1,5 +1,3 @@
-import { getAirportPlatform } from './api'
-
 function mapsStopName(name) {
   if (name === '那覇空港' || name === '旅客ターミナル前') return '国内線旅客ターミナル前';
   return name;
@@ -48,7 +46,7 @@ function formatDelay(minutes) {
   return `${Math.abs(minutes)}分早い`;
 }
 
-function BusCard({ bus, platform }) {
+function BusCard({ bus }) {
   const color = getStatusColor(bus.etaMinutes);
 
   return (
@@ -99,7 +97,6 @@ function BusCard({ bus, platform }) {
           <span className="bus-company">{bus.company}</span>
           {bus.scheduledTime && <span className="bus-scheduled">{bus.isHolidayVariant ? '定刻≈' : '定刻 '}{bus.scheduledTime}</span>}
           <span className="bus-dest">→ {bus.destination}</span>
-          {platform && <span className="bus-platform">のりば{platform}</span>}
         </div>
         {bus.isScheduleOnly && (
           <div className="other-bus-note">
@@ -122,7 +119,7 @@ function BusCard({ bus, platform }) {
   );
 }
 
-export default function BusList({ buses, otherBuses, fromStation }) {
+export default function BusList({ buses, otherBuses }) {
   // otherBusesをBusCard形式に変換して統合
   const otherAsBusCards = (otherBuses || []).flatMap(route => {
     if (!route.departures || route.departures.length === 0) return [];
@@ -174,15 +171,13 @@ export default function BusList({ buses, otherBuses, fromStation }) {
   const waiting = allBuses.filter(b => b.notDeparted || b.isTimetable || b.isScheduleOnly)
     .sort((a, b) => (a.etaMinutes ?? 999) - (b.etaMinutes ?? 999));
 
-  const isAirport = fromStation === '那覇空港' || fromStation === '旅客ターミナル前' || fromStation === '国内線旅客ターミナル前' || fromStation === '国際線旅客ターミナル前';
-
   return (
     <div className="bus-list">
       {running.length > 0 && (
         <div className="bus-group">
           <div className="bus-group-header">🚌 走行中</div>
           {running.map((bus) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} platform={isAirport ? getAirportPlatform(bus.routeShort) : null} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction}`} bus={bus} />
           ))}
         </div>
       )}
@@ -190,7 +185,7 @@ export default function BusList({ buses, otherBuses, fromStation }) {
         <div className="bus-group">
           <div className="bus-group-header">🕐 まもなく出発</div>
           {waiting.map((bus) => (
-            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} platform={isAirport ? getAirportPlatform(bus.routeShort) : null} />
+            <BusCard key={`${bus.routeKey}-${bus.busId}-${bus.direction || ''}`} bus={bus} />
           ))}
         </div>
       )}
