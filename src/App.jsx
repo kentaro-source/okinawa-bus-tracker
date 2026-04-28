@@ -67,15 +67,12 @@ function App() {
   const [destination, setDestination] = useState(() =>
     toInternalName(localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル')
   );
-  const [via, setVia] = useState(''); // 経由地（空文字=乗換モードOFF）
   const [buses, setBuses] = useState([]);
   const [otherBuses, setOtherBuses] = useState([]);
-  const [busesLeg2, setBusesLeg2] = useState([]); // 2区間目（乗換モード時）
-  const [otherBusesLeg2, setOtherBusesLeg2] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
-  const [selectorMode, setSelectorMode] = useState(null); // null | 'from' | 'via' | 'to'
+  const [selectorMode, setSelectorMode] = useState(null); // null | 'from' | 'to'
   const [showInfo, setShowInfo] = useState(false);
   const [menuView, setMenuView] = useState('menu'); // menu | about | usage | troubleshoot | credits
   const [favorites, setFavorites] = useState(loadFavorites);
@@ -83,47 +80,16 @@ function App() {
   const intervalRef = useRef(null);
 
   const prevBusesRef = useRef([]);
-  const fetchBuses = useCallback(async (from, to, viaPoint = '') => {
+  const fetchBuses = useCallback(async (from, to) => {
     try {
       setError(null);
-      if (from === to && !viaPoint) {
+      if (from === to) {
         setBuses([]);
         setOtherBuses([]);
-        setBusesLeg2([]);
-        setOtherBusesLeg2([]);
         prevBusesRef.current = [];
         setLastUpdate(new Date());
         return;
       }
-
-      // 乗換モード: 2区間を並列取得
-      if (viaPoint) {
-        setOtherBuses(getOtherBusesBetween(from, viaPoint));
-        setOtherBusesLeg2(getOtherBusesBetween(viaPoint, to));
-        const [data1, data2] = await Promise.all([
-          getBusesBetween(from, viaPoint),
-          getBusesBetween(viaPoint, to),
-        ]);
-        setBuses(data1.sort((a, b) => {
-          if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
-          if (a.etaMinutes === null) return 1;
-          if (b.etaMinutes === null) return -1;
-          return a.etaMinutes - b.etaMinutes;
-        }));
-        setBusesLeg2(data2.sort((a, b) => {
-          if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
-          if (a.etaMinutes === null) return 1;
-          if (b.etaMinutes === null) return -1;
-          return a.etaMinutes - b.etaMinutes;
-        }));
-        prevBusesRef.current = []; // 乗換モードでは保持なし（簡略化）
-        setLastUpdate(new Date());
-        return;
-      }
-
-      // 単区間モード
-      setBusesLeg2([]);
-      setOtherBusesLeg2([]);
       // 他社バス（静的データ、即時）
       setOtherBuses(getOtherBusesBetween(from, to));
       const data = await getBusesBetween(from, to);
@@ -324,7 +290,9 @@ function App() {
                   <p>県外から沖縄にちょくちょく来る中で、バスの遅延が多くて「次に来るバスがどれなのか予想できない」のが不便で、個人的に作っている沖縄のバスアプリです。</p>
                   <p>広告も入れずぼちぼち運用しているので、多少の表示ズレや不具合は大目に見てもらえるとありがたいです。</p>
                   <p>「あと○分」の到着予測は、バスの通過記録と定刻をもとに計算しています。道路状況やGPSの精度で実際とは数分ずれることがあります。</p>
-                  <p>現在は直通バスのみ表示しています。乗り換え案内は今後実装予定ですが、渋滞でバスが遅れているときは近くのバス停を出発地に変更すると別便が見つかることがあります。詳しい乗換案内が必要なときは「Googleで乗換案内」リンクをご利用ください。</p>
+                  <p>現在は直通バスのみ表示しています。本格的な乗換案内（複数経路の自動最適化、徒歩経路、リアルタイム遅延を加味した最短ルート計算）は無料・広告なしの個人運営の範囲では難しいので、Googleマップなど大手サービスをご利用ください（ヘッダーの「🗺 Googleで乗換案内」ボタンから飛べます）。</p>
+                  <p>近い将来、出発・目的地のペアを2組同時に表示できる「2路線並行表示」を実装したいと考えています。「このバスを乗り過ごしたら次はどれか」「途中下車して別便に乗り換えるなら何分後か」の判断が、ユーザー側の手動操作で済む形を目指します。</p>
+                  <p>渋滞でバスが遅れているときは、近くのバス停を出発地に変更して別便を探すと回避できることがあります。</p>
                   <p>気づいた点があれば「不具合報告・ご要望」から教えてください。気長に直していきます。</p>
                   <p className="info-sub">更新間隔: 45秒</p>
                 </>
