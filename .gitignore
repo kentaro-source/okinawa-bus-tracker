@@ -24,3 +24,13 @@ dist-ssr
 *.sw?
 generate-icons.html
 start.js
+
+# Claude Code ローカル設定・作業ディレクトリ（PC固有）
+.claude/launch.json
+.claude/worktrees/
+
+# GTFS元データ（scripts/build-timetable.cjs が参照。各社の配布元から再取得可能）
+gtfs_data/
+
+# 調査用一時ファイル（リポジトリ直下に作らないこと）
+tmp_*

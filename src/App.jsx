@@ -62,7 +62,7 @@ function saveRouteFavorites(routes) {
 
 function App() {
   const [station, setStation] = useState(() =>
-    toInternalName(localStorage.getItem(LAST_STATION_KEY) || '那覇バスターミナル')
+    toInternalName(localStorage.getItem(LAST_STATION_KEY) || '那覇空港')
   );
   const [destination, setDestination] = useState(() =>
     toInternalName(localStorage.getItem(LAST_DEST_KEY) || '那覇バスターミナル')

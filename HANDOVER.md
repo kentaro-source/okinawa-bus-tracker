@@ -1,6 +1,6 @@
 # HANDOVER.md - バスどこ沖縄 引き継ぎ資料
 
-最終更新: 2026-07-07（コードベース全体調査に基づき作成）
+最終更新: 2026-07-07（全体調査で作成。同日: デフォルト出発地を那覇空港に復元、調査用残骸26ファイル削除・.gitignore整備）
 
 このファイルは、初見のAIセッションがこのファイルだけを読んで開発を継続できることを目的とする。
 セッション終了時・大きな変更時に「実装済み機能」「既知のバグ」「残タスク」を必ず更新すること。
@@ -43,7 +43,7 @@
 | `src/otherBuses.js` | 他社バス（東京バス・やんばる急行・カリー観光・エアポートシャトル）の路線定義と時刻表検索 |
 | `src/otherBusTimetable.js` | **自動生成ファイル**（scripts/build-timetable.cjs が gtfs_data/ から生成。直接編集しない。生成日2026-04-13） |
 | `functions/api/[[path]].js` | Cloudflare Functions。APIプロキシ + HTMLパース + GTFS-RTデコード + LINE Bot Webhook |
-| `scripts/build-timetable.cjs` | GTFSデータ→otherBusTimetable.js 生成スクリプト（`gtfs_data/<会社dir>/` が必要。gtfs_dataはgit未追跡） |
+| `scripts/build-timetable.cjs` | GTFSデータ→otherBusTimetable.js 生成スクリプト（`gtfs_data/<会社dir>/` が必要。gtfs_dataは.gitignore対象） |
 | `public/sw.js` | Service Worker（network-first、APIはキャッシュ対象外。キャッシュ名 `bus-tracker-v4`） |
 | `public/manifest.json` | PWAマニフェスト（名称「バスどこ沖縄」） |
 | `docs/spec.md` | 初期の要求仕様書（歴史的資料。現状はこのHANDOVERが正） |
@@ -119,29 +119,29 @@
 
 ## 4. 既知のバグ・未解決の問題
 
-1. **初回起動時のデフォルトが「那覇バスターミナル→那覇バスターミナル」**（App.jsx:64-69）
-   - 出発・目的地とも既定値が那覇バスターミナルのため、初回ユーザーには from===to → 空リスト＋「見つかりませんでした」が表示される
-   - CLAUDE.mdの旧記載「出発=那覇空港、目的地=那覇バスターミナル」はコードと不一致だった（少なくともコミットac77900以降ずっと両方那覇BT）。意図した仕様か退行かは未確認。要ユーザー確認
-2. **東京バスGTFS-RTのフロント表示は一時停止中**（App.jsx:96-97でコメントアウト）
+1. **東京バスGTFS-RTのフロント表示は一時停止中**（App.jsx:96-97でコメントアウト）
    - 理由: ルート方向判定・座標マッチングの精度不足。`getTokyoBusLive()`（otherBuses.js）とプロキシは実装済みのまま残っている
    - route_id 795/796（OTTOP内部ID）→TK01-TK06のマッピング未完
-3. **那覇バスターミナルの出発時刻表が取得できない**（API制限、調査完了2026-04-20）
+2. **那覇バスターミナルの出発時刻表が取得できない**（API制限、調査完了2026-04-20）
    - Approach APIが返すstationSidが「おりばA」（降車場）のため、Timetable APIで出発時刻表が取れない（到着のみ7路線）
    - 空港（出発15路線）・県庁北口（出発45路線）は正常。OTTOP GTFS static移行で解決可能
-4. **祝日便問題**: 平日に祝日ダイヤ便が走っていたケースあり（120番で確認）。YoubiKbnフィルタは撤去済み（BusLocationが返すバスは実運行とみなす）が、根本原因・対策は保留
-5. **Timetable APIの欠落便**: 117番空港発は実際19本中API側8本のみ→SUPPLEMENTAL_DEPARTURESで補完済み。他路線にも同様の欠落がある可能性（未調査）
-6. **やんばる急行のOTTOP GTFS-RT対応は未確認**。カリー観光はリアルタイムなし、エアポートシャトルはBus-Vision（公開APIなし）
-7. **LINE BotのCloudflare環境変数設定状態が未確認**（コードはデプロイ済みだが、LINE Developersのチャネル設定・Webhook URL登録・環境変数設定が済んでいるか不明）
-8. **リポジトリ直下に未追跡の調査用ファイルが大量に残置**（approach*.html、timetable.html、tmp_*.json、tmp_ykb_*.pdf、tmp_tk_gtfs.zip、gtfs_data/、化けたファイル名`C：devokinawa-bus-tracker...`2件）。コミット対象にしないよう注意。整理（削除 or .gitignore追加）が望ましい
-9. **otherBusTimetable.jsの鮮度**: 2026-04-13生成。各社ダイヤ改正時は gtfs_data/ を更新して `node scripts/build-timetable.cjs` で再生成が必要（gtfs_dataは未追跡のためPC間で共有されない）
-10. カリー観光の石垣島路線（287/500）がTIMETABLEに含まれるが、路線定義（KARRY_ROUTES）は本島のみなので表示されない（実害なし、データの無駄のみ）
+3. **祝日便問題**: 平日に祝日ダイヤ便が走っていたケースあり（120番で確認）。YoubiKbnフィルタは撤去済み（BusLocationが返すバスは実運行とみなす）が、根本原因・対策は保留
+4. **Timetable APIの欠落便**: 117番空港発は実際19本中API側8本のみ→SUPPLEMENTAL_DEPARTURESで補完済み。他路線にも同様の欠落がある可能性（未調査）
+5. **やんばる急行のOTTOP GTFS-RT対応は未確認**。カリー観光はリアルタイムなし、エアポートシャトルはBus-Vision（公開APIなし）
+6. **LINE BotのCloudflare環境変数設定状態が未確認**（コードはデプロイ済みだが、LINE Developersのチャネル設定・Webhook URL登録・環境変数設定が済んでいるか不明）
+7. **otherBusTimetable.jsの鮮度**: 2026-04-13生成。各社ダイヤ改正時は gtfs_data/ を更新して `node scripts/build-timetable.cjs` で再生成が必要（gtfs_dataは.gitignore対象のためPC間で共有されない。各社配布元から再取得可能）
+8. カリー観光の石垣島路線（287/500）がTIMETABLEに含まれるが、路線定義（KARRY_ROUTES）は本島のみなので表示されない（実害なし、データの無駄のみ）
+9. **初回起動（バス停キャッシュ未構築）はバス表示まで時間がかかる**: getBusesBetweenがキャッシュなしだと全114路線をスキャンするため（1路線あたり2〜4リクエスト×5並列）、初回表示に1分以上かかることがある。さらにfetchBusesに再入防止がなく、45秒間隔の自動更新が前回未完了のまま重なるとリクエストが滞留する（ローカルdev検証時に実際に発生）。バス停キャッシュ構築後は絞り込みスキャンで速い。デフォルトが那覇空港だった旧実装（〜2026-03）から存在する挙動。対策案: fetch実行中は次のインターバルをスキップ／キャッシュ未構築時はAIRPORT_ROUTE_NUMBERSで絞る
+
+### 解決済み（経緯の記録）
+- **初回起動時のデフォルトが「那覇BT→那覇BT」で空表示になる問題**: 2026-07-07修正。コミットac77900（2026-03-30、ルートお気に入り追加）でデフォルト出発地が那覇空港から那覇BTに変わっていた（コミットメッセージに言及なし＝リファクタの巻き添えと判断）。出発=那覇空港（内部名: 旅客ターミナル前）に復元
+- **リポジトリ直下の調査用残骸**: 2026-07-07に26ファイル削除（approach*.html×7、timetable.html、tmp_*.json×13、tmp_tk_gtfs.zip、tmp_ykb_*.pdf×2、化けたファイル名2件）。tmp_* は.gitignoreに追加済み
 
 ## 5. 残タスクと次に着手すべきこと
 
 ### 次に着手すべき（優先度順の提案）
-1. **デフォルト出発/目的地の確認・修正**（上記バグ1）— 初回ユーザー体験に直結。ユーザーに意図を確認してから修正
-2. **LINE Bot の本番化**（ロードマップ「LINE bot化」の続き）— Webhookコードは実装済み。残り: LINE Developersチャネル作成→Cloudflare Pages環境変数設定→Webhook URL登録→動作確認→要望受付機能の追加検討
-3. **2路線並行表示** — メニュー「このアプリについて」で予告済みの機能（出発・目的地ペアを2組同時表示、乗り過ごし・途中乗換の判断支援）。未着手
+1. **LINE Bot の本番化**（ロードマップ「LINE bot化」の続き）— Webhookコードは実装済み。残り: LINE Developersチャネル作成→Cloudflare Pages環境変数設定→Webhook URL登録→動作確認→要望受付機能の追加検討
+2. **2路線並行表示** — メニュー「このアプリについて」で予告済みの機能（出発・目的地ペアを2組同時表示、乗り過ごし・途中乗換の判断支援）。未着手
 
 ### ロードマップ（CLAUDE.mdより、未着手）
 - 多言語対応(日中韓英)
@@ -153,3 +153,4 @@
 - 修正フロー: コミット→push→`npm run build`→`npx wrangler pages deploy dist --project-name=okinawa-bus --branch=main --commit-dirty=true`
 - 他社バスの路線定義（otherBuses.js）を変更する際は、バス停名をGTFS時刻表（otherBusTimetable.js）のキーと完全一致させること（漏れると検索に出ない）
 - UI文言は誤解を招く表現を避ける（「最速」等は使わない）。詳細方針はCLAUDE.md参照
+- 調査用の一時ファイルはリポジトリ直下に置かない（scratchpadを使う）。`tmp_*`・`gtfs_data/`・`.claude/launch.json`・`.claude/worktrees/` は.gitignore済み
