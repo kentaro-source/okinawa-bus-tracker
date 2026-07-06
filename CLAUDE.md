@@ -22,12 +22,12 @@
 
 ## API仕様
 - ベースURL: `busnavi-okinawa.com`（Cloudflare Functions経由で `/api/*` にプロキシ）
-- 主要エンドポイント: GetRouteList, GetCoursesGroup, GetStations, GetBusLocation
+- 主要エンドポイント: GetRouteList, GetCoursesGroup, GetStations, BusLocation, Approach, StationCorrection, Timetable（一覧と詳細はHANDOVER.mdを参照）
 - バス停キャッシュ: localStorage `bus-tracker-station-cache-v2`（全路線の全停留所を集約）
 
 ## 主要な設計判断
 - 全プロジェクトPWA + TWA統一方針（修正はサイトデプロイのみで反映）
-- デフォルト: 出発=那覇空港、目的地=那覇バスターミナル（路線が多く初回表示のインパクト重視）
+- デフォルトの出発・目的地: 現行の仕様値はHANDOVER.mdを参照（現行コードは出発・目的地とも那覇バスターミナルで、初回表示が空になる問題あり。HANDOVER.md「既知のバグ」1参照）
 - バス停選択はクイックアクセス＋お気に入りのみ（一覧表示なし、検索で絞り込み）
 - バックエンドにSupabase利用可能
 
@@ -43,7 +43,7 @@
 - 走行中バスを上、未出発を下にグループ表示
 
 ## 主要バス停（クイックアクセス）
-那覇バスターミナル / 国際通り入口 / アメリカンビレッジ / 県庁北口 / イオンモール沖縄ライカム / 普天間 / 具志川バスターミナル / おもろまち駅前
+現行の仕様値はHANDOVER.mdを参照（実体は `src/StationSelector.jsx` の POPULAR_STOPS）
 
 ## ロードマップ
 - 使い込み・配布テスト中（2026年4月〜）
@@ -112,8 +112,8 @@
 - 遅延表示: 遅れのみ（早発は非表示）、15停留所以内に限定
 - 逆方向フィルタ（旧）: 行先が出発地と一致→除外。processBuses内でOrderNo順序チェック
 - Google Mapsリンク: 全社統一で出発バス停→目的バス停の経路案内
-- ふりがな検索: READING_ALIASES（55件）+ 他社バス停にyomigana付与
-- 那覇空港の乗り場番号: 実装済み（メイン4社+他社バス）
+- ふりがな検索: READING_ALIASES（実効53件）+ 他社バス停にyomigana付与
+- 那覇空港の乗り場番号表示: 削除済み（情報が不正確だったため。コミットa2bbab4）
 - Service Worker: network-first戦略
 - Approach API補完: 出発地＋目的地の両方のキャッシュから路線取得（デュアルキャッシュ）
 - matchStation: EXCLUDED_SUFFIXESで部分一致誤爆を防止
@@ -130,3 +130,6 @@
 - PR: https://github.com/kentaro-source/okinawa-bus-tracker/pull/1
 - Git設定: kentaro-source / kentaro@kawagoe-sangyoui.com
 - **重要: 修正後は必ずコミット→push→ビルド→デプロイの順で実行すること（PC間の同期漏れ防止）**
+
+セッション開始時に必ずHANDOVER.mdを読んでから作業すること。
+セッション終了時、または大きな変更を加えた時点で、HANDOVER.mdの実装済み機能・既知のバグ・残タスクを現状に合わせて更新すること。
