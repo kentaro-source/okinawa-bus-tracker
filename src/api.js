@@ -116,8 +116,16 @@ async function fetchJSON(url) {
   return JSON.parse(text);
 }
 
+// 系統構成（グループ・停留所並び）は運行中ほぼ変わらないため、セッション内キャッシュで
+// 45秒ごとの自動更新やバス停切替時の再取得を高速化する（BusLocationは常に最新を取得）
+const coursesGroupCache = new Map();
+const stationsCache = new Map();
+
 export async function getCoursesGroup(keitouSid) {
-  return fetchJSON(`${BASE}/GetCoursesGroup?keitouSid=${keitouSid}`);
+  if (coursesGroupCache.has(keitouSid)) return coursesGroupCache.get(keitouSid);
+  const data = await fetchJSON(`${BASE}/GetCoursesGroup?keitouSid=${keitouSid}`);
+  coursesGroupCache.set(keitouSid, data);
+  return data;
 }
 
 export async function getCourses(courseGroupSid) {
@@ -125,9 +133,13 @@ export async function getCourses(courseGroupSid) {
 }
 
 export async function getStations(keitouSid, courseGroupSid, courseSid = 'AllStations', courseName = '全停留所表示') {
-  return fetchJSON(
+  const cacheKey = `${keitouSid}|${courseGroupSid}|${courseSid}`;
+  if (stationsCache.has(cacheKey)) return stationsCache.get(cacheKey);
+  const data = await fetchJSON(
     `${BASE}/GetStations?datetime=${dt()}&keitouSid=${keitouSid}&courseGroupSid=${courseGroupSid}&courseSid=${encodeURIComponent(courseSid)}&courseName=${encodeURIComponent(courseName)}`
   );
+  stationsCache.set(cacheKey, data);
+  return data;
 }
 
 export async function getBusLocation(keitouSid, courseGroupSid, courseSid = 'AllStations', courseName = '全停留所表示') {
@@ -233,38 +245,44 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         if (firstOrder != null && lastPassageOrder != null && lastPassageOrder > firstOrder) {
           const stopCount = lastPassageOrder - firstOrder;
 
-          // ETA推定: 実績ベースの1停あたり時間
-          if (firstArrival && lastArrival) {
-            const actualPerStop = (lastArrival - firstArrival) / 60000 / stopCount;
-            const elapsed = (new Date() - lastArrival) / 60000;
-            etaMinutes = Math.max(1, Math.round(actualPerStop * stopsAway - elapsed));
-          }
-
-          // 定刻推定: PassageにScheduledTimeがあればそれを使用、なければ実績ベース
           const firstSched = firstPassage.Schedule?.ScheduledTime;
           const lastSched = lastPassage.Schedule?.ScheduledTime;
-          if (firstSched && lastSched) {
-            const schedFirst = firstSched.Hour * 60 + firstSched.Minute;
-            const schedLast = lastSched.Hour * 60 + lastSched.Minute;
-            const schedPerStop = (schedLast - schedFirst) / stopCount;
-            const estMinutes = schedLast + Math.round(schedPerStop * stopsAway);
-            scheduledHour = Math.floor(estMinutes / 60) % 24;
-            scheduledMinute = estMinutes % 60;
-            scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
-          } else if (firstArrival && lastArrival) {
-            // ScheduledTimeなし → 実績から定刻を推定
-            const actualPerStop = (lastArrival - firstArrival) / 60000 / stopCount;
-            const estArrival = new Date(lastArrival.getTime() + actualPerStop * stopsAway * 60000);
-            scheduledHour = estArrival.getHours();
-            scheduledMinute = estArrival.getMinutes();
-            scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
-          }
 
-          // 遅延推定
+          // 遅延推定（直近停留所の実績 − 定刻）
           if (!isNearOrigin && lastArrival && lastSched) {
             const lastSchedDate = new Date();
             lastSchedDate.setHours(lastSched.Hour, lastSched.Minute, 0, 0);
             delayMinutes = Math.round((lastArrival - lastSchedDate) / 60000);
+          }
+
+          // 定刻推定: 停車済み停留所の定刻間隔から自停留所の定刻を推定
+          let estMinutes = null;
+          if (firstSched && lastSched) {
+            const schedFirst = firstSched.Hour * 60 + firstSched.Minute;
+            const schedLast = lastSched.Hour * 60 + lastSched.Minute;
+            const schedPerStop = (schedLast - schedFirst) / stopCount;
+            estMinutes = schedLast + Math.round(schedPerStop * stopsAway);
+            scheduledHour = Math.floor(estMinutes / 60) % 24;
+            scheduledMinute = estMinutes % 60;
+            scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
+          }
+
+          // ETA: 自停留所の推定定刻 ＋ 現在の遅延（本線の計算方式に統一。
+          // 以前の「実績ペース×残り停数」は遅延の回復・拡大に弱く誤差が大きかった）
+          if (estMinutes != null) {
+            const estDate = new Date();
+            estDate.setHours(0, 0, 0, 0);
+            estDate.setMinutes(estMinutes + (delayMinutes || 0));
+            etaMinutes = Math.round((estDate - new Date()) / 60000);
+          } else if (firstArrival && lastArrival) {
+            // 定刻が取れない場合のみ実績ペースで推定し、定刻表示も実績から出す
+            const actualPerStop = (lastArrival - firstArrival) / 60000 / stopCount;
+            const elapsed = (new Date() - lastArrival) / 60000;
+            etaMinutes = Math.max(1, Math.round(actualPerStop * stopsAway - elapsed));
+            const estArrival = new Date(lastArrival.getTime() + actualPerStop * stopsAway * 60000);
+            scheduledHour = estArrival.getHours();
+            scheduledMinute = estArrival.getMinutes();
+            scheduledTime = `${String(scheduledHour).padStart(2, '0')}:${String(scheduledMinute).padStart(2, '0')}`;
           }
         }
       }
@@ -554,11 +572,28 @@ function getCachedRoutesForStation(stationName) {
 // Fetch buses for a given set of routes, filtered by station name
 // Returns { buses, confirmedRoutes } where confirmedRoutes is a Set of route numbers
 // with confirmed from→to direction (used to validate isTimetable buses)
-async function fetchBusesForRoutes(routes, stationName, destinationName) {
+async function fetchBusesForRoutes(routes, stationName, destinationName, onProgress) {
   const results = [];
   // 方向確認済み路線: routeShort → コース終点名のSet
   // isTimetableバスのdestinationがこの終点名にマッチすれば正しい方向と判定
   const confirmedRouteEnds = new Map();
+
+  // 途中経過にも最終結果にも使う共通の絞り込み＋並び替え
+  const finalize = (list) => list
+    .filter(r => {
+      // Remove passed buses（到着直前のバスが予測誤差で消えないよう-3分まで許容）
+      if (r.etaMinutes !== null && r.etaMinutes < -3) return false;
+      // Remove 未出発 buses more than 60 minutes away
+      if (r.notDeparted && r.etaMinutes !== null && r.etaMinutes > 60) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      // 走行中 first, 未出発 second
+      if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
+      if (a.etaMinutes === null) return 1;
+      if (b.etaMinutes === null) return -1;
+      return a.etaMinutes - b.etaMinutes;
+    });
 
   const tasks = routes.map((route) => async () => {
     try {
@@ -613,27 +648,15 @@ async function fetchBusesForRoutes(routes, stationName, destinationName) {
     } catch (e) {
       console.warn(`Route ${route.short} failed:`, e);
     }
+    // 1路線終わるごとに途中経過を通知（段階表示用）
+    if (onProgress) {
+      try { onProgress(finalize([...results]), new Map(confirmedRouteEnds)); } catch {}
+    }
   });
 
-  await runWithConcurrency(tasks, 5);
+  await runWithConcurrency(tasks, 8);
 
-  const buses = results
-    .filter(r => {
-      // Remove passed buses
-      if (r.etaMinutes !== null && r.etaMinutes <= 0) return false;
-      // Remove 未出発 buses more than 60 minutes away
-      if (r.notDeparted && r.etaMinutes !== null && r.etaMinutes > 60) return false;
-      return true;
-    })
-    .sort((a, b) => {
-      // 走行中 first, 未出発 second
-      if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
-      if (a.etaMinutes === null) return 1;
-      if (b.etaMinutes === null) return -1;
-      return a.etaMinutes - b.etaMinutes;
-    });
-
-  return { buses, confirmedRouteEnds };
+  return { buses: finalize([...results]), confirmedRouteEnds };
 }
 
 // StationCodeキャッシュ（セッション中有効）
@@ -894,7 +917,7 @@ function hasStationCache() {
 
 // Get buses between any two stations, pre-filtered by station cache
 // BusLocation（リアルタイム）とApproach（接近情報）を並列取得してマージ
-export async function getBusesBetween(fromStation, toStation) {
+export async function getBusesBetween(fromStation, toStation, onPartial) {
   const allRoutes = await fetchAllRoutes();
 
   // Use cached station data to narrow down routes (avoids hundreds of API calls)
@@ -917,14 +940,37 @@ export async function getBusesBetween(fromStation, toStation) {
     console.warn('Station cache not built yet: falling back to airport routes only');
   }
 
-  // リアルタイムデータと接近情報を並列取得
-  // 接近情報は目的地フィルタなしで取得（getBusesBetween側でフィルタ）
-  const [realtimeResult, approach] = await Promise.all([
-    fetchBusesForRoutes(routes, fromStation, toStation),
-    getApproachBuses(fromStation, toStation),
-  ]);
-  // 方向確認済み路線: GetStationsで出発→目的地の停車順序が確認された路線 + 終点名
-  const confirmedRouteEnds = realtimeResult.confirmedRouteEnds;
+  // 段階表示: 接近情報が届いた時点と、リアルタイム側で路線が終わるごとに、
+  // その時点までの最良の結果を onPartial で返す（最終結果は戻り値）
+  let approachData = null;
+  let latestRealtime = { buses: [], confirmedRouteEnds: new Map() };
+  let lastEmit = 0;
+  const emitPartial = (force = false) => {
+    if (!onPartial || approachData == null) return;
+    const nowMs = Date.now();
+    if (!force && nowMs - lastEmit < 1500) return;
+    lastEmit = nowMs;
+    try {
+      onPartial(mergeBusResults(latestRealtime.buses, latestRealtime.confirmedRouteEnds, approachData, fromStation, toStation));
+    } catch {}
+  };
+
+  const approachPromise = getApproachBuses(fromStation, toStation)
+    .catch(() => [])
+    .then(a => { approachData = a; emitPartial(true); });
+
+  const realtimeResult = await fetchBusesForRoutes(routes, fromStation, toStation, (buses, ends) => {
+    latestRealtime = { buses, confirmedRouteEnds: ends };
+    emitPartial();
+  });
+  await approachPromise;
+
+  return mergeBusResults(realtimeResult.buses, realtimeResult.confirmedRouteEnds, approachData || [], fromStation, toStation);
+}
+
+// リアルタイム＋接近情報のマージ（方向検証・重複排除・絞り込み・並び替え）
+// 段階表示の途中経過と最終結果で同じ処理を使う
+function mergeBusResults(realtimeBuses, confirmedRouteEnds, approach, fromStation, toStation) {
 
   // 共通方向検証ロジック: バスが出発→目的地の正方向か判定
   // - 行先が出発地と一致 → 逆方向（false）
@@ -942,7 +988,7 @@ export async function getBusesBetween(fromStation, toStation) {
   };
 
   // リアルタイムバスの方向検証（processBusesで漏れたケースをキャッチ）
-  const realtime = realtimeResult.buses.filter(isCorrectDirection);
+  const realtime = realtimeBuses.filter(isCorrectDirection);
 
   // 接近情報を方向＋目的地でフィルタ
   // - 時刻表由来: 方向検証必須

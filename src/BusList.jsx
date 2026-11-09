@@ -73,6 +73,7 @@ function BusCard({ bus }) {
         <div className="bus-route">
           <span className="route-number">{bus.routeShort}番</span>
           <span className="route-name">{bus.routeName.replace(/^\d+番\s*/, '')}</span>
+          {bus.destination && <span className="bus-dest-main">→ {bus.destination}</span>}
           {bus.isHolidayVariant && <span className="bus-holiday-tag">臨時</span>}
           <span className="bus-source-tag">{getSourceLabel(bus)}</span>
         </div>
@@ -112,7 +113,6 @@ function BusCard({ bus }) {
         <div className="bus-detail">
           <span className="bus-company">{bus.company}</span>
           {bus.scheduledTime && <span className="bus-scheduled">{bus.isHolidayVariant ? '定刻≈' : '定刻 '}{bus.scheduledTime}</span>}
-          <span className="bus-dest">→ {bus.destination}</span>
           {gpsAge != null && gpsAge >= 2 && (
             <span className="bus-gps-age">📡 GPS {gpsAge}分前{gpsAge >= 10 ? '（位置情報が古い可能性があります）' : ''}</span>
           )}

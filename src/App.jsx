@@ -73,6 +73,8 @@ function App() {
   const [buses, setBuses] = useState([]);
   const [otherBuses, setOtherBuses] = useState([]);
   const [loading, setLoading] = useState(true);
+  // 段階表示中フラグ（速報表示→全路線の確認完了でfalse）
+  const [isPartial, setIsPartial] = useState(false);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [selectorMode, setSelectorMode] = useState(null); // null | 'from' | 'to'
@@ -101,7 +103,13 @@ function App() {
       }
       // 他社バス（静的データ、即時）
       setOtherBuses(getOtherBusesBetween(from, to));
-      const data = await getBusesBetween(from, to);
+      // 段階表示: 接近情報→リアルタイムの順に届いた時点の結果を先に描画する
+      const data = await getBusesBetween(from, to, (partial) => {
+        if (seq !== fetchSeqRef.current) return;
+        setBuses(partial);
+        setIsPartial(true);
+        setLoading(false);
+      });
       // 取得中に別の取得（バス停変更など）が始まっていたら、この結果は古いので捨てる
       if (seq !== fetchSeqRef.current) return;
       // 東京バスGTFS-RTは一時停止（ルート方向判定・座標マッチング要改善）
@@ -131,6 +139,7 @@ function App() {
       if (seq === fetchSeqRef.current) {
         fetchInFlightRef.current = false;
         setLoading(false);
+        setIsPartial(false);
       }
     }
   }, []);
@@ -383,7 +392,13 @@ function App() {
 
       <main className="main">
         {loading && buses.length === 0 && (
-          <div className="loading">バス情報を取得中...</div>
+          <div className="loading">
+            バス情報を取得中...
+            <div className="loading-sub">時刻表・接近情報から先に表示します</div>
+          </div>
+        )}
+        {isPartial && buses.length > 0 && (
+          <div className="partial-note">速報表示中です。全路線の確認が終わるまで、表示が増える場合があります</div>
         )}
         {error && (
           <div className="error">

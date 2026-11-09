@@ -417,6 +417,21 @@ body {
   color: var(--red);
 }
 
+.loading-sub {
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.partial-note {
+  text-align: center;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--text2);
+  background: var(--bg3);
+  border-radius: 8px;
+}
+
 .empty-hint {
   font-size: 13px;
   margin-top: 8px;
@@ -536,6 +551,13 @@ body {
   color: var(--text2);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bus-dest-main {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
   white-space: nowrap;
 }
 

@@ -59,10 +59,11 @@ function parseTimetableHtml(html) {
     const routeInfo = headerCells[headerCells.length - 1] || '';
     const numMatch = routeInfo.match(/\[(\d+)\]/);
     const routeNumber = numMatch ? numMatch[1] : '';
-    const destMatch = routeInfo.match(/（(.+?)行き）/);
-    const destination = destMatch ? destMatch[1] : '';
-    const companyMatch = routeInfo.match(/行き）\s*(.+)$/);
-    const company = companyMatch ? companyMatch[1].trim() : '';
+    // 行き先は最後の（〜行き）を取る: 路線名側に（共同運行）等の括弧があると
+    // 素朴な最短一致では「共同運行）（名護バスターミナル」のように崩れるため、括弧を含まない形で一致させる
+    const destMatch = routeInfo.match(/（([^（）]+?)行き）/);
+    const destination = destMatch ? destMatch[1].trim() : '';
+    const company = destMatch ? routeInfo.slice(destMatch.index + destMatch[0].length).trim() : '';
 
     // 平日/土曜/日祝ブロックのパース
     const schedules = { weekday: [], saturday: [], holiday: [] };
