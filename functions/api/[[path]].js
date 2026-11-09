@@ -59,9 +59,10 @@ function parseTimetableHtml(html) {
     const routeInfo = headerCells[headerCells.length - 1] || '';
     const numMatch = routeInfo.match(/\[(\d+)\]/);
     const routeNumber = numMatch ? numMatch[1] : '';
-    // 行き先は最後の（〜行き）を取る: 路線名側に（共同運行）等の括弧があると
-    // 素朴な最短一致では「共同運行）（名護バスターミナル」のように崩れるため、括弧を含まない形で一致させる
-    const destMatch = routeInfo.match(/（([^（）]+?)行き）/);
+    // 行き先は（〜行き）の形を取る: 路線名側に（共同運行）等の括弧があると
+    // 素朴な最短一致では「共同運行）（名護バスターミナル」のように崩れる。
+    // 行き先自体に（終点）等の入れ子括弧がある場合も拾えるよう、入れ子1段まで許す
+    const destMatch = routeInfo.match(/（((?:[^（）]|（[^（）]*）)+?)行き）/);
     const destination = destMatch ? destMatch[1].trim() : '';
     const company = destMatch ? routeInfo.slice(destMatch.index + destMatch[0].length).trim() : '';
 
