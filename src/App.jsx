@@ -13,6 +13,10 @@ const ROUTE_FAVORITES_KEY = 'bus-tracker-route-favorites';
 const MAX_ROUTE_FAVORITES = 5;
 const LAST_STATION_KEY = 'bus-tracker-last-station';
 const LAST_DEST_KEY = 'bus-tracker-last-dest';
+// 2区間並行表示用
+const LAST_STATION2_KEY = 'bus-tracker-last-station2';
+const LAST_DEST2_KEY = 'bus-tracker-last-dest2';
+const DUAL_VIEW_KEY = 'bus-tracker-dual-view';
 // 那覇空港のバス停名はバスナビ側で '那覇空港（〜向け）' に変更された（旧称: 旅客ターミナル前）
 // 内部名は現在の正式名 '那覇空港' に統一し、旧称はすべてここで吸収する
 // 表示名→内部名の変換（APIに存在しないバス停名を実名に変換）
@@ -75,6 +79,20 @@ function App() {
   const [loading, setLoading] = useState(true);
   // 段階表示中フラグ（速報表示→全路線の確認完了でfalse）
   const [isPartial, setIsPartial] = useState(false);
+  // 2区間並行表示（第2区間は独立した状態・取得を持つ）
+  const [dualView, setDualView] = useState(() => localStorage.getItem(DUAL_VIEW_KEY) === '1');
+  const [station2, setStation2] = useState(() =>
+    toInternalName(localStorage.getItem(LAST_STATION2_KEY) || '那覇バスターミナル')
+  );
+  const [destination2, setDestination2] = useState(() =>
+    toInternalName(localStorage.getItem(LAST_DEST2_KEY) || '那覇空港')
+  );
+  const [buses2, setBuses2] = useState([]);
+  const [otherBuses2, setOtherBuses2] = useState([]);
+  const [loading2, setLoading2] = useState(true);
+  const [isPartial2, setIsPartial2] = useState(false);
+  const [error2, setError2] = useState(null);
+  const [lastUpdate2, setLastUpdate2] = useState(null);
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [selectorMode, setSelectorMode] = useState(null); // null | 'from' | 'to'
@@ -88,6 +106,11 @@ function App() {
   // 取得の重なり対策: 実行中フラグ（自動更新のスキップ判定）と連番（古い取得結果の破棄）
   const fetchInFlightRef = useRef(false);
   const fetchSeqRef = useRef(0);
+  // 第2区間用
+  const prevBuses2Ref = useRef([]);
+  const fetchInFlight2Ref = useRef(false);
+  const fetchSeq2Ref = useRef(0);
+  const interval2Ref = useRef(null);
   const fetchBuses = useCallback(async (from, to) => {
     const seq = ++fetchSeqRef.current;
     fetchInFlightRef.current = true;
@@ -163,6 +186,92 @@ function App() {
     setBuses([]);
     fetchBuses(station, internal);
   }, [fetchBuses, station]);
+
+  // 第2区間の取得（第1区間と同じ段階表示・瞬断防止を適用）
+  const fetchBuses2 = useCallback(async (from, to) => {
+    const seq = ++fetchSeq2Ref.current;
+    fetchInFlight2Ref.current = true;
+    try {
+      setError2(null);
+      if (from === to) {
+        if (seq !== fetchSeq2Ref.current) return;
+        setBuses2([]);
+        setOtherBuses2([]);
+        prevBuses2Ref.current = [];
+        setLastUpdate2(new Date());
+        return;
+      }
+      setOtherBuses2(getOtherBusesBetween(from, to));
+      const data = await getBusesBetween(from, to, (partial) => {
+        if (seq !== fetchSeq2Ref.current) return;
+        setBuses2(partial);
+        setIsPartial2(true);
+        setLoading2(false);
+      });
+      if (seq !== fetchSeq2Ref.current) return;
+      const newKeys = new Set(data.map(b => b.busId));
+      const retained = prevBuses2Ref.current.filter(b =>
+        !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && (b._retainCount || 0) < 2
+      ).map(b => ({ ...b, _retainCount: (b._retainCount || 0) + 1 }));
+      const merged = [...data, ...retained].sort((a, b) => {
+        if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
+        if (a.etaMinutes === null) return 1;
+        if (b.etaMinutes === null) return -1;
+        return a.etaMinutes - b.etaMinutes;
+      });
+      setBuses2(merged);
+      prevBuses2Ref.current = merged;
+      setLastUpdate2(new Date());
+    } catch (e) {
+      if (seq !== fetchSeq2Ref.current) return;
+      setError2(e.message);
+    } finally {
+      if (seq === fetchSeq2Ref.current) {
+        fetchInFlight2Ref.current = false;
+        setLoading2(false);
+        setIsPartial2(false);
+      }
+    }
+  }, []);
+
+  const changeStation2 = useCallback((newStation) => {
+    const internal = toInternalName(newStation);
+    setStation2(internal);
+    localStorage.setItem(LAST_STATION2_KEY, internal);
+    setSelectorMode(null);
+    setLoading2(true);
+    setBuses2([]);
+    fetchBuses2(internal, destination2);
+  }, [fetchBuses2, destination2]);
+
+  const changeDestination2 = useCallback((newDest) => {
+    const internal = toInternalName(newDest);
+    setDestination2(internal);
+    localStorage.setItem(LAST_DEST2_KEY, internal);
+    setSelectorMode(null);
+    setLoading2(true);
+    setBuses2([]);
+    fetchBuses2(station2, internal);
+  }, [fetchBuses2, station2]);
+
+  const toggleDualView = useCallback(() => {
+    setDualView(prev => {
+      const next = !prev;
+      localStorage.setItem(DUAL_VIEW_KEY, next ? '1' : '0');
+      return next;
+    });
+  }, []);
+
+  // 第2区間が有効な間だけ取得・自動更新する
+  useEffect(() => {
+    if (!dualView) return;
+    fetchBuses2(station2, destination2);
+    interval2Ref.current = setInterval(() => {
+      if (fetchInFlight2Ref.current) return;
+      fetchBuses2(station2, destination2);
+    }, REFRESH_INTERVAL);
+    return () => clearInterval(interval2Ref.current);
+  }, [dualView, station2, destination2, fetchBuses2]);
 
   const resetToAirport = useCallback(() => {
     changeDestination('那覇空港');
@@ -320,7 +429,7 @@ function App() {
                   <p>広告も入れずぼちぼち運用しているので、多少の表示ズレや不具合は大目に見てもらえるとありがたいです。</p>
                   <p>「あと○分」の到着予測は、バスの通過記録と定刻をもとに計算しています。道路状況やGPSの精度で実際とは数分ずれることがあります。</p>
                   <p>現在は直通バスのみ表示しています。本格的な乗換案内（複数経路の自動最適化、徒歩経路、リアルタイム遅延を加味した最短ルート計算）は無料・広告なしの個人運営の範囲では難しいので、Googleマップなど大手サービスをご利用ください（ヘッダーの「🗺 Googleで乗換案内」ボタンから飛べます）。</p>
-                  <p>近い将来、出発・目的地のペアを2組同時に表示できる「2路線並行表示」を実装したいと考えています。「このバスを乗り過ごしたら次はどれか」「途中下車して別便に乗り換えるなら何分後か」の判断が、ユーザー側の手動操作で済む形を目指します。</p>
+                  <p>フッターの「＋2区間表示」から、出発・目的地のペアを2組同時に表示できます。「このバスを乗り過ごしたら次はどれか」「帰りはどのバスか」の判断に使ってください。</p>
                   <p>渋滞でバスが遅れているときは、近くのバス停を出発地に変更して別便を探すと回避できることがあります。</p>
                   <p>気づいた点があれば「不具合報告・ご要望」から教えてください。気長に直していきます。</p>
                   <p className="info-sub">更新間隔: 45秒</p>
@@ -425,6 +534,56 @@ function App() {
           </div>
         )}
         <BusList buses={filteredBuses} otherBuses={otherBuses} />
+
+        {dualView && (
+          <section className="dual-section">
+            <div className="dual-header">
+              <span className="dual-label">2区間目</span>
+              <button className="dual-station-btn" onClick={() => setSelectorMode('from2')}>
+                {toDisplayName(station2)}
+              </button>
+              <button
+                className="dual-swap-btn"
+                onClick={() => {
+                  const newFrom = destination2;
+                  const newTo = station2;
+                  setStation2(newFrom);
+                  setDestination2(newTo);
+                  localStorage.setItem(LAST_STATION2_KEY, newFrom);
+                  localStorage.setItem(LAST_DEST2_KEY, newTo);
+                }}
+                title="出発地と目的地を入れ替え"
+              >
+                →
+              </button>
+              <button className="dual-station-btn" onClick={() => setSelectorMode('to2')}>
+                {toDisplayName(destination2)}
+              </button>
+              <button className="dual-close-btn" onClick={toggleDualView} title="2区間表示を閉じる">✕</button>
+            </div>
+            {lastUpdate2 && (
+              <div className="dual-update">最終更新: {lastUpdate2.toLocaleTimeString('ja-JP')}</div>
+            )}
+            {loading2 && buses2.length === 0 && (
+              <div className="loading">
+                バス情報を取得中...
+                <div className="loading-sub">時刻表・接近情報から先に表示します</div>
+              </div>
+            )}
+            {isPartial2 && buses2.length > 0 && (
+              <div className="partial-note">速報表示中です。全路線の確認が終わるまで、表示が増える場合があります</div>
+            )}
+            {error2 && (
+              <div className="error">更新に失敗しています: {error2}</div>
+            )}
+            {!loading2 && buses2.length === 0 && otherBuses2.length === 0 && !error2 && (
+              <div className="empty">
+                <p>現在、{toDisplayName(station2)}→{toDisplayName(destination2)}のバスは見つかりませんでした</p>
+              </div>
+            )}
+            <BusList buses={buses2} otherBuses={otherBuses2} />
+          </section>
+        )}
       </main>
 
       <footer className="footer">
@@ -457,6 +616,9 @@ function App() {
             <button className="btn-action" onClick={() => setSelectorMode('from')}>
               バス停検索
             </button>
+            <button className="btn-action" onClick={toggleDualView}>
+              {dualView ? '2区間を閉じる' : '＋2区間表示'}
+            </button>
             <a className="btn-action btn-gmaps" href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">
               Google Maps
             </a>
@@ -466,17 +628,31 @@ function App() {
 
       {selectorMode && (
         <StationSelector
-          onSelect={selectorMode === 'from' ? changeStation : changeDestination}
+          onSelect={
+            selectorMode === 'from' ? changeStation
+            : selectorMode === 'to' ? changeDestination
+            : selectorMode === 'from2' ? changeStation2
+            : changeDestination2
+          }
           onClose={() => setSelectorMode(null)}
           favorites={favorites}
           onToggleFavorite={toggleFavorite}
-          title={selectorMode === 'from' ? '出発バス停を選択' : '目的バス停を選択'}
+          title={
+            selectorMode === 'from' ? '出発バス停を選択'
+            : selectorMode === 'to' ? '目的バス停を選択'
+            : selectorMode === 'from2' ? '出発バス停を選択（2区間目）'
+            : '目的バス停を選択（2区間目）'
+          }
           showAirportShortcut={true}
           onSelectAirport={() => {
             if (selectorMode === 'from') {
               changeStation('那覇空港');
-            } else {
+            } else if (selectorMode === 'to') {
               resetToAirport();
+            } else if (selectorMode === 'from2') {
+              changeStation2('那覇空港');
+            } else {
+              changeDestination2('那覇空港');
             }
           }}
         />
