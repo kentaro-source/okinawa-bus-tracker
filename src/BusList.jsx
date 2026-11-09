@@ -1,5 +1,5 @@
 function mapsStopName(name) {
-  if (name === '那覇空港' || name === '旅客ターミナル前') return '国内線旅客ターミナル前';
+  if (name === '那覇空港' || name === '旅客ターミナル前' || name === '国内線旅客ターミナル前' || name === '国際線旅客ターミナル前') return '那覇空港';
   return name;
 }
 

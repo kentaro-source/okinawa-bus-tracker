@@ -13,22 +13,25 @@ const ROUTE_FAVORITES_KEY = 'bus-tracker-route-favorites';
 const MAX_ROUTE_FAVORITES = 5;
 const LAST_STATION_KEY = 'bus-tracker-last-station';
 const LAST_DEST_KEY = 'bus-tracker-last-dest';
-// 那覇空港は内部的に '旅客ターミナル前' で処理（国内線/国際線両方にマッチ）
+// 那覇空港のバス停名はバスナビ側で '那覇空港（〜向け）' に変更された（旧称: 旅客ターミナル前）
+// 内部名は現在の正式名 '那覇空港' に統一し、旧称はすべてここで吸収する
 // 表示名→内部名の変換（APIに存在しないバス停名を実名に変換）
 function toInternalName(name) {
-  if (name === '那覇空港') return '旅客ターミナル前';
-  if (name === '国内線旅客ターミナル前') return '旅客ターミナル前';
-  if (name === '国際線旅客ターミナル前') return '旅客ターミナル前';
+  if (name === '那覇空港') return '那覇空港';
+  if (name === '旅客ターミナル前') return '那覇空港';
+  if (name === '国内線旅客ターミナル前') return '那覇空港';
+  if (name === '国際線旅客ターミナル前') return '那覇空港';
   return name;
 }
 // 内部名→表示名の逆変換（正式なバス停名を表示）
 function toDisplayName(name) {
-  if (name === '旅客ターミナル前') return '国内線旅客ターミナル前';
+  if (name === '旅客ターミナル前') return '那覇空港';
+  if (name === '国内線旅客ターミナル前') return '那覇空港';
+  if (name === '国際線旅客ターミナル前') return '那覇空港';
   return name;
 }
 function mapsStopName(name) {
-  if (name === '那覇空港' || name === '旅客ターミナル前' || name === '国内線旅客ターミナル前') return '国内線旅客ターミナル前';
-  if (name === '国際線旅客ターミナル前') return '国際線旅客ターミナル前';
+  if (name === '那覇空港' || name === '旅客ターミナル前' || name === '国内線旅客ターミナル前' || name === '国際線旅客ターミナル前') return '那覇空港';
   return name;
 }
 
