@@ -73,7 +73,7 @@ function BusCard({ bus }) {
         <div className="bus-route">
           <span className="route-number">{bus.routeShort}番</span>
           <span className="route-name">{bus.routeName.replace(/^\d+番\s*/, '')}</span>
-          {bus.destination && <span className="bus-dest-main">→ {bus.destination}</span>}
+          {bus.destination && !bus.routeName.includes(bus.destination) && <span className="bus-dest-main">→ {bus.destination}</span>}
           {bus.isHolidayVariant && <span className="bus-holiday-tag">臨時</span>}
           <span className="bus-source-tag">{getSourceLabel(bus)}</span>
         </div>
