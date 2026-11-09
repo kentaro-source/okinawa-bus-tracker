@@ -592,6 +592,18 @@ body {
   font-weight: 600;
 }
 
+.bus-source-tag {
+  font-size: 10px;
+  border: 1px solid var(--text2);
+  color: var(--text2);
+  padding: 0 5px;
+  border-radius: 4px;
+}
+
+.bus-gps-age {
+  color: var(--yellow);
+}
+
 .bus-via {
   font-size: 11px;
   color: var(--accent);

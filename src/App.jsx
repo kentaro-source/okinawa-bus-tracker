@@ -80,10 +80,16 @@ function App() {
   const intervalRef = useRef(null);
 
   const prevBusesRef = useRef([]);
+  // 取得の重なり対策: 実行中フラグ（自動更新のスキップ判定）と連番（古い取得結果の破棄）
+  const fetchInFlightRef = useRef(false);
+  const fetchSeqRef = useRef(0);
   const fetchBuses = useCallback(async (from, to) => {
+    const seq = ++fetchSeqRef.current;
+    fetchInFlightRef.current = true;
     try {
       setError(null);
       if (from === to) {
+        if (seq !== fetchSeqRef.current) return;
         setBuses([]);
         setOtherBuses([]);
         prevBusesRef.current = [];
@@ -93,6 +99,8 @@ function App() {
       // 他社バス（静的データ、即時）
       setOtherBuses(getOtherBusesBetween(from, to));
       const data = await getBusesBetween(from, to);
+      // 取得中に別の取得（バス停変更など）が始まっていたら、この結果は古いので捨てる
+      if (seq !== fetchSeqRef.current) return;
       // 東京バスGTFS-RTは一時停止（ルート方向判定・座標マッチング要改善）
       // const tokyoLive = await getTokyoBusLive(from, to);
 
@@ -113,9 +121,14 @@ function App() {
       prevBusesRef.current = merged;
       setLastUpdate(new Date());
     } catch (e) {
+      if (seq !== fetchSeqRef.current) return;
       setError(e.message);
     } finally {
-      setLoading(false);
+      // 最新の取得だけが実行中フラグとローディングを解除する
+      if (seq === fetchSeqRef.current) {
+        fetchInFlightRef.current = false;
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -182,7 +195,11 @@ function App() {
 
   useEffect(() => {
     fetchBuses(station, destination);
-    intervalRef.current = setInterval(() => fetchBuses(station, destination), REFRESH_INTERVAL);
+    intervalRef.current = setInterval(() => {
+      // 前回の取得が終わっていないときは自動更新を1回飛ばす（リクエスト滞留防止）
+      if (fetchInFlightRef.current) return;
+      fetchBuses(station, destination);
+    }, REFRESH_INTERVAL);
     return () => clearInterval(intervalRef.current);
   }, [station, destination, fetchBuses]);
 
@@ -318,6 +335,12 @@ function App() {
                     <li><strong>🔴</strong>: それ以降</li>
                     <li><strong>⏳</strong>: 走行中で時刻不明</li>
                   </ul>
+                  <h3 className="info-section-title">到着予測の根拠</h3>
+                  <ul className="info-list">
+                    <li><strong>リアルタイム</strong>: バスの通過記録から計算した予測です。「GPS ○分前」と出ている場合は、その分だけ位置情報が古い可能性があります</li>
+                    <li><strong>接近情報</strong>: バス停への接近情報にもとづく予測です</li>
+                    <li><strong>時刻表</strong>: 位置情報はなく、定刻どおり運行している前提の表示です。遅れている場合があります</li>
+                  </ul>
                   <h3 className="info-section-title">更新</h3>
                   <p>45秒ごとに自動で更新されます。スマホでは画面を引き下げて手動更新もできます。</p>
                 </>
@@ -360,7 +383,12 @@ function App() {
           <div className="loading">バス情報を取得中...</div>
         )}
         {error && (
-          <div className="error">エラー: {error}</div>
+          <div className="error">
+            更新に失敗しています: {error}
+            {lastUpdate && buses.length > 0 && (
+              <span>（表示中の情報は {lastUpdate.toLocaleTimeString('ja-JP')} 時点のものです）</span>
+            )}
+          </div>
         )}
         {!loading && filteredBuses.length === 0 && otherBuses.length === 0 && !error && (
           <div className="empty">

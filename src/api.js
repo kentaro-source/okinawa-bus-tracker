@@ -880,6 +880,16 @@ export async function getAllBuses(stationName) {
   return buses;
 }
 
+// バス停キャッシュ自体が存在するか（未構築か、構築済みだが該当なし、の判別用）
+function hasStationCache() {
+  try {
+    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
+    return !!(cached && cached.data && cached.ts > Date.now() - 86400000);
+  } catch {
+    return false;
+  }
+}
+
 // Get buses between any two stations, pre-filtered by station cache
 // BusLocation（リアルタイム）とApproach（接近情報）を並列取得してマージ
 export async function getBusesBetween(fromStation, toStation) {
@@ -892,9 +902,18 @@ export async function getBusesBetween(fromStation, toStation) {
   const knownRoutes = (fromRoutes || toRoutes)
     ? new Set([...(fromRoutes || []), ...(toRoutes || [])])
     : null;
+  // キャッシュ未構築時は全路線スキャン（初回表示に1分以上）を避け、空港路線に絞る。
+  // デフォルトの出発地が那覇空港のため、初回利用の大半はこの範囲で足りる。
+  // キャッシュ構築後（バス停選択を開いた後）は通常どおり全路線から絞り込む。
+  const cacheExists = hasStationCache();
   const routes = knownRoutes
     ? allRoutes.filter(r => knownRoutes.has(r.short))
-    : allRoutes;
+    : cacheExists
+      ? allRoutes
+      : allRoutes.filter(r => AIRPORT_ROUTE_NUMBERS.has(r.short));
+  if (!knownRoutes && !cacheExists) {
+    console.warn('Station cache not built yet: falling back to airport routes only');
+  }
 
   // リアルタイムデータと接近情報を並列取得
   // 接近情報は目的地フィルタなしで取得（getBusesBetween側でフィルタ）

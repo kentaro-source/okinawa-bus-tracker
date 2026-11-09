@@ -46,8 +46,23 @@ function formatDelay(minutes) {
   return `${Math.abs(minutes)}分早い`;
 }
 
+// ETAの根拠（利用者が予測の確からしさを判断できるよう、カードに明示する）
+function getSourceLabel(bus) {
+  if (bus.isScheduleOnly || bus.isTimetable) return '時刻表';
+  if (bus.isApproach) return '接近情報';
+  return 'リアルタイム';
+}
+
+// GPS時刻からの経過分（位置情報の鮮度）。gpsTimeが無いバスでは null
+function getGpsAgeMinutes(bus) {
+  if (!bus.gpsTime) return null;
+  const age = Math.floor((Date.now() - new Date(bus.gpsTime).getTime()) / 60000);
+  return age >= 0 ? age : null;
+}
+
 function BusCard({ bus }) {
   const color = getStatusColor(bus.etaMinutes);
+  const gpsAge = getGpsAgeMinutes(bus);
 
   return (
     <div className={`bus-card ${color}`}>
@@ -59,6 +74,7 @@ function BusCard({ bus }) {
           <span className="route-number">{bus.routeShort}番</span>
           <span className="route-name">{bus.routeName.replace(/^\d+番\s*/, '')}</span>
           {bus.isHolidayVariant && <span className="bus-holiday-tag">臨時</span>}
+          <span className="bus-source-tag">{getSourceLabel(bus)}</span>
         </div>
         <div className="bus-eta">
           <span className="eta-time">{formatETA(bus.etaMinutes)}</span>
@@ -74,7 +90,7 @@ function BusCard({ bus }) {
           </div>
         ) : bus.isTimetable ? (
           <div className="bus-position not-departed">
-            🕐 {bus.scheduledTime}発
+            🕐 {bus.scheduledTime}発 <span className="schedule-label">（時刻表）</span>
           </div>
         ) : bus.notDeparted ? (
           <div className="bus-position not-departed">
@@ -97,6 +113,9 @@ function BusCard({ bus }) {
           <span className="bus-company">{bus.company}</span>
           {bus.scheduledTime && <span className="bus-scheduled">{bus.isHolidayVariant ? '定刻≈' : '定刻 '}{bus.scheduledTime}</span>}
           <span className="bus-dest">→ {bus.destination}</span>
+          {gpsAge != null && gpsAge >= 2 && (
+            <span className="bus-gps-age">📡 GPS {gpsAge}分前{gpsAge >= 10 ? '（位置情報が古い可能性があります）' : ''}</span>
+          )}
         </div>
         {bus.isScheduleOnly && (
           <div className="other-bus-note">
