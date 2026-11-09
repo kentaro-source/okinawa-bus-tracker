@@ -122,6 +122,9 @@ body {
   font-size: inherit;
   font-weight: inherit;
   transition: border-color 0.2s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-station-btn:hover,
@@ -600,6 +603,7 @@ body {
   align-items: baseline;
   gap: 6px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
 }
 
 .route-number {
@@ -624,7 +628,9 @@ body {
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
-  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .bus-eta {
