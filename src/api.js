@@ -163,6 +163,30 @@ function isRunningToday(youbiKbn) {
   return youbiKbn[todayFlag] === true;
 }
 
+// ETAの下限: 「残り2停留所なのにあと1分」のような物理的にあり得ない予測を抑える。
+// - 残り停留所数ぶんは最低でもかかる（1停留所あたり1分）
+// - GPSが新鮮なら、現在位置から自停留所までの直線距離でも下限をかける
+//   （市街地のバスが24km/hを超える実効速度で接近し続けることはない前提）
+function etaFloorMinutes(stopsAway, busPos, stationPos, gpsTime) {
+  let floor = null;
+  if (stopsAway != null && stopsAway > 0) floor = stopsAway;
+  const gpsFresh = gpsTime && (Date.now() - gpsTime.getTime()) <= 3 * 60000;
+  if (gpsFresh && busPos && stationPos?.Latitude != null && stationPos?.Longitude != null) {
+    const dLat = (busPos.Latitude - stationPos.Latitude) * 111;
+    const dLng = (busPos.Longitude - stationPos.Longitude) * 101;
+    const distKm = Math.sqrt(dLat * dLat + dLng * dLng);
+    const byDist = Math.ceil(distKm / 0.4);
+    floor = floor == null ? byDist : Math.max(floor, byDist);
+  }
+  return floor;
+}
+
+function applyEtaFloor(etaMinutes, stopsAway, busPos, stationPos, gpsTime) {
+  if (etaMinutes == null) return etaMinutes;
+  const floor = etaFloorMinutes(stopsAway, busPos, stationPos, gpsTime);
+  return floor == null ? etaMinutes : Math.max(etaMinutes, floor);
+}
+
 // Process buses from a single group (上り or 下り)
 function processBuses(buses, stationName, route, group, direction, destinationName, allStations) {
   const results = [];
@@ -308,6 +332,12 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
           }
           if (viaStops.length >= 3) break;
         }
+      }
+
+      // ETAの下限（残り停留所数・GPS距離）を適用してから積む
+      {
+        const ourStationPos = (allStations || []).find(s => matchStation(stationName, s.Name))?.Position || null;
+        etaMinutes = applyEtaFloor(etaMinutes, stopsAway, bus.Position, ourStationPos, parseNetDate(bus.GpsTime));
       }
 
       results.push({
@@ -469,6 +499,13 @@ function processBuses(buses, stationName, route, group, direction, destinationNa
         }
         if (viaStops.length >= 3) break;
       }
+    }
+
+    // ETAの下限（残り停留所数・GPS距離）を適用してから積む
+    if (!busAlreadyPassed) {
+      const ourPos = (allStations || []).find(s => s.Name === matchedStationName)?.Position
+        || stationSchedule.Station?.Position || null;
+      etaMinutes = applyEtaFloor(etaMinutes, stopsAway, bus.Position, ourPos, parseNetDate(bus.GpsTime));
     }
 
     results.push({
@@ -1027,6 +1064,10 @@ function mergeBusResults(realtimeBuses, confirmedRouteEnds, approach, fromStatio
   const merged = [...realtime, ...approachOnly, ...limitedTimetable];
 
   return merged
+    // 接近情報など位置を持たないバスにも、残り停留所数の下限だけは全体で適用する
+    .map(r => (r.stopsAway != null && r.stopsAway > 0 && r.etaMinutes != null && r.etaMinutes < r.stopsAway)
+      ? { ...r, etaMinutes: r.stopsAway }
+      : r)
     .filter(r => {
       // 通過済みのバスは除外
       if (r.passed) return false;
