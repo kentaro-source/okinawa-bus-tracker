@@ -129,6 +129,10 @@ function App() {
       // 段階表示: 接近情報→リアルタイムの順に届いた時点の結果を先に描画する
       const data = await getBusesBetween(from, to, (partial) => {
         if (seq !== fetchSeqRef.current) return;
+        // 空の速報では画面を切り替えない: 接近情報だけでは0件でも、後続の
+        // リアルタイム走査でバスが見つかることが多く、そのまま描画すると
+        // 「見つかりませんでした」が一瞬表示されてしまう（2026-11-10実地報告）
+        if (partial.length === 0) return;
         setBuses(partial);
         setIsPartial(true);
         setLoading(false);
@@ -204,6 +208,7 @@ function App() {
       setOtherBuses2(getOtherBusesBetween(from, to));
       const data = await getBusesBetween(from, to, (partial) => {
         if (seq !== fetchSeq2Ref.current) return;
+        if (partial.length === 0) return;
         setBuses2(partial);
         setIsPartial2(true);
         setLoading2(false);
