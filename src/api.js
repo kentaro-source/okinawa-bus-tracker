@@ -614,6 +614,10 @@ async function fetchBusesForRoutes(routes, stationName, destinationName, onProgr
   // 方向確認済み路線: routeShort → コース終点名のSet
   // isTimetableバスのdestinationがこの終点名にマッチすれば正しい方向と判定
   const confirmedRouteEnds = new Map();
+  // 出発バス停に一致した停留所のSid（のりば単位）。
+  // 那覇バスターミナルのようにApproach由来のSidが到着のりばを指すバス停では、
+  // Timetable APIが到着便しか返さないため、出発のりばのSidで時刻表を引き直すのに使う
+  const fromStationSids = new Set();
 
   // 途中経過にも最終結果にも使う共通の絞り込み＋並び替え
   const finalize = (list) => list
@@ -664,6 +668,9 @@ async function fetchBusesForRoutes(routes, stationName, destinationName, onProgr
 
         const depStations = findMatchingStations(stationName);
         if (depStations.length === 0) continue;
+        for (const ds of depStations) {
+          if (ds.Sid) fromStationSids.add(ds.Sid);
+        }
 
         // If destination specified, check if this direction also passes through it
         if (destinationName) {
@@ -705,7 +712,7 @@ async function fetchBusesForRoutes(routes, stationName, destinationName, onProgr
 
   await runWithConcurrency(tasks, 8);
 
-  return { buses: finalize([...results]), confirmedRouteEnds };
+  return { buses: finalize([...results]), confirmedRouteEnds, fromStationSids };
 }
 
 // StationCodeキャッシュ（セッション中有効）
@@ -948,6 +955,30 @@ async function getTimetableBuses(stationSid, busStopCode, destinationName) {
   }
 }
 
+// 出発のりばのSidから時刻表を取得する（Approach由来Sidが到着のりばを指すバス停向け）
+// 例: 那覇バスターミナルはApproachのSidでは到着便しか返らないが、
+// 各路線のGetStationsで得た「のりば」のSidでは出発便が返る（2026-11-11実証）
+async function getDepartureTimetableBuses(stationName, stationSids) {
+  const stationCode = await getStationCode(stationName);
+  if (!stationCode || !stationSids || stationSids.size === 0) return [];
+  const busStopCode = stationCode + '0000';
+  const sids = Array.from(stationSids).slice(0, 6);
+  const lists = await Promise.all(
+    sids.map(sid => getTimetableBuses(sid, busStopCode, null).catch(() => []))
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const list of lists) {
+    for (const b of list) {
+      const key = `${b.routeShort}-${b.scheduledTime}-${b.destination}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(b);
+    }
+  }
+  return merged;
+}
+
 // 目的地フィルタ共通処理
 function filterByDestination(dest, routeName, destinationName) {
   if (!destinationName) return true;
@@ -1029,7 +1060,28 @@ export async function getBusesBetween(fromStation, toStation, onPartial) {
   });
   await approachPromise;
 
-  return mergeBusResults(realtimeResult.buses, realtimeResult.confirmedRouteEnds, approachData || [], fromStation, toStation);
+  // Approach由来の時刻表に「出発便」が1本も無い場合（那覇バスターミナル等、
+  // ApproachのSidが到着のりばを指すバス停）、走査で集めた出発のりばのSidで
+  // 時刻表を引き直して補う。到着便しか無い時刻表は方向フィルタで全て落ち、
+  // リアルタイムが薄い時間帯に区間全体が空表示になっていた（2026-11-11実地報告）
+  let finalApproach = approachData || [];
+  const usableTimetable = finalApproach.filter(
+    b => b.isTimetable && !matchStation(fromStation, b.destination || '')
+  );
+  if (usableTimetable.length === 0 && realtimeResult.fromStationSids?.size > 0) {
+    try {
+      const extra = await getDepartureTimetableBuses(fromStation, realtimeResult.fromStationSids);
+      if (extra.length > 0) {
+        const existing = new Set(finalApproach.map(b => `${b.routeShort}-${b.scheduledTime}-${b.destination}`));
+        finalApproach = [
+          ...finalApproach,
+          ...extra.filter(b => !existing.has(`${b.routeShort}-${b.scheduledTime}-${b.destination}`)),
+        ];
+      }
+    } catch {}
+  }
+
+  return mergeBusResults(realtimeResult.buses, realtimeResult.confirmedRouteEnds, finalApproach, fromStation, toStation);
 }
 
 // リアルタイム＋接近情報のマージ（方向検証・重複排除・絞り込み・並び替え）
