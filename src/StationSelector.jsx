@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { fetchAllRoutes, getCoursesGroup, getStations, runWithConcurrency } from './api'
+import { fetchAllRoutes, getCoursesGroup, getStations, runWithConcurrency, loadBundledStationIndex } from './api'
 import { ALL_OTHER_STOPS } from './otherBuses'
 
 const STATION_CACHE_KEY = 'bus-tracker-station-cache-v2';
@@ -205,8 +205,8 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       return;
     }
 
-    async function loadStations() {
-      setLoading(true);
+    async function loadStations(hasInitialData = false) {
+      if (!hasInitialData) setLoading(true);
       const stationSet = new Map();
 
       const allRoutes = await fetchAllRoutes();
@@ -286,7 +286,16 @@ export default function StationSelector({ onSelect, onClose, favorites, onToggle
       setLoading(false);
     }
 
-    loadStations();
+    // 同梱索引があれば即時に表示し、実スキャンは裏で最新化する（初回でも待たせない）
+    let cancelled = false;
+    (async () => {
+      const bundled = await loadBundledStationIndex();
+      if (!cancelled && bundled) {
+        setAllStations(mergeOtherStops(bundled));
+      }
+      loadStations(!!bundled);
+    })();
+    return () => { cancelled = true; };
   }, []);
 
   const filtered = query

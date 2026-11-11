@@ -554,16 +554,38 @@ export async function runWithConcurrency(tasks, limit) {
   return results;
 }
 
-// Look up which route numbers serve a station (from station cache)
-// Collects routes from ALL matching stations (not just the first match)
-function getCachedRoutesForStation(stationName) {
+// バス停キャッシュ（localStorage）のデータ配列を読む。なければ null
+function readStationCacheData() {
   try {
     const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
-    if (cached && cached.data) {
+    return cached && Array.isArray(cached.data) ? cached.data : null;
+  } catch {
+    return null;
+  }
+}
+
+// 同梱のバス停索引（public/station-index.json、ビルド時に生成）を読む。
+// 初回起動でキャッシュが無い場合の初期データとして使う（メモ化して1回だけ取得）
+let bundledStationIndexPromise = null;
+export function loadBundledStationIndex() {
+  if (!bundledStationIndexPromise) {
+    bundledStationIndexPromise = fetch('/station-index.json')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => (j && Array.isArray(j.stations) && j.stations.length > 0 ? j.stations : null))
+      .catch(() => null);
+  }
+  return bundledStationIndexPromise;
+}
+
+// Look up which route numbers serve a station (from station data)
+// Collects routes from ALL matching stations (not just the first match)
+function getCachedRoutesForStation(stationName, stationData) {
+  try {
+    if (stationData) {
       const routes = new Set();
 
       // Direct/partial match against all stations
-      for (const s of cached.data) {
+      for (const s of stationData) {
         if (s.name === stationName || s.name.includes(stationName) || stationName.includes(s.name)) {
           s.routes.forEach(r => routes.add(r));
         }
@@ -575,7 +597,7 @@ function getCachedRoutesForStation(stationName) {
         const aliases = STATION_ALIASES[stationName];
         if (aliases) {
           for (const alias of aliases) {
-            for (const s of cached.data) {
+            for (const s of stationData) {
               if (s.name.includes(alias)) {
                 s.routes.forEach(r => routes.add(r));
               }
@@ -589,7 +611,7 @@ function getCachedRoutesForStation(stationName) {
             const normAliases = STATION_ALIASES[normalized];
             if (normAliases) {
               for (const alias of normAliases) {
-                for (const s of cached.data) {
+                for (const s of stationData) {
                   if (s.name.includes(alias)) {
                     s.routes.forEach(r => routes.add(r));
                   }
@@ -1000,39 +1022,29 @@ export async function getAllBuses(stationName) {
   return buses;
 }
 
-// バス停キャッシュ自体が存在するか（未構築か、構築済みだが該当なし、の判別用）
-function hasStationCache() {
-  try {
-    const cached = JSON.parse(localStorage.getItem('bus-tracker-station-cache-v2'));
-    return !!(cached && cached.data && cached.ts > Date.now() - 86400000);
-  } catch {
-    return false;
-  }
-}
-
 // Get buses between any two stations, pre-filtered by station cache
 // BusLocation（リアルタイム）とApproach（接近情報）を並列取得してマージ
 export async function getBusesBetween(fromStation, toStation, onPartial) {
   const allRoutes = await fetchAllRoutes();
 
-  // Use cached station data to narrow down routes (avoids hundreds of API calls)
-  // 出発地＋目的地両方のキャッシュを使用（片方だけ失敗したケースをカバー）
-  const fromRoutes = getCachedRoutesForStation(fromStation);
-  const toRoutes = toStation ? getCachedRoutesForStation(toStation) : null;
+  // Use station data to narrow down routes (avoids hundreds of API calls)
+  // バス停データは localStorage キャッシュ優先、無ければ同梱索引（初回起動でも全路線から絞れる）
+  // 出発地＋目的地両方のデータを使用（片方だけ失敗したケースをカバー）
+  const stationData = readStationCacheData() || (await loadBundledStationIndex());
+  const fromRoutes = getCachedRoutesForStation(fromStation, stationData);
+  const toRoutes = toStation ? getCachedRoutesForStation(toStation, stationData) : null;
   const knownRoutes = (fromRoutes || toRoutes)
     ? new Set([...(fromRoutes || []), ...(toRoutes || [])])
     : null;
-  // キャッシュ未構築時は全路線スキャン（初回表示に1分以上）を避け、空港路線に絞る。
-  // デフォルトの出発地が那覇空港のため、初回利用の大半はこの範囲で足りる。
-  // キャッシュ構築後（バス停選択を開いた後）は通常どおり全路線から絞り込む。
-  const cacheExists = hasStationCache();
+  // バス停データが無い場合のみ、全路線スキャン（初回表示に1分以上）を避け空港路線に絞る
+  const cacheExists = !!stationData;
   const routes = knownRoutes
     ? allRoutes.filter(r => knownRoutes.has(r.short))
     : cacheExists
       ? allRoutes
       : allRoutes.filter(r => AIRPORT_ROUTE_NUMBERS.has(r.short));
   if (!knownRoutes && !cacheExists) {
-    console.warn('Station cache not built yet: falling back to airport routes only');
+    console.warn('No station data available: falling back to airport routes only');
   }
 
   // 段階表示: 接近情報が届いた時点と、リアルタイム側で路線が終わるごとに、
