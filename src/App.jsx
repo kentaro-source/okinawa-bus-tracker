@@ -148,11 +148,12 @@ function App() {
       });
       // 取得中に別の取得（バス停変更など）が始まっていたら、この結果は古いので捨てる
       if (seq !== fetchSeqRef.current) return;
-      // 東京バスGTFS-RTは一時停止（ルート方向判定・座標マッチング要改善）
-      // const tokyoLive = await getTokyoBusLive(from, to);
+      // 東京バスGTFS-RT: tripIdで静的データと結合する方式に刷新し再開（2026-11-11）
+      const tokyoLive = await getTokyoBusLive(from, to).catch(() => []);
+      if (seq !== fetchSeqRef.current) return;
 
       // 前回表示されていたバスが今回消えた場合、最大2サイクル（90秒）維持（瞬断防止）
-      const allData = data;
+      const allData = [...data, ...tokyoLive.filter(t => !data.some(b => b.busId === t.busId))];
       const newKeys = new Set(allData.map(b => b.busId));
       const retained = prevBusesRef.current.filter(b =>
         !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && (b._retainCount || 0) < 2
@@ -228,11 +229,14 @@ function App() {
         setLoading2(false);
       });
       if (seq !== fetchSeq2Ref.current) return;
-      const newKeys = new Set(data.map(b => b.busId));
+      const tokyoLive2 = await getTokyoBusLive(from, to).catch(() => []);
+      if (seq !== fetchSeq2Ref.current) return;
+      const allData2 = [...data, ...tokyoLive2.filter(t => !data.some(b => b.busId === t.busId))];
+      const newKeys = new Set(allData2.map(b => b.busId));
       const retained = prevBuses2Ref.current.filter(b =>
         !newKeys.has(b.busId) && b.stopsAway != null && b.stopsAway > 0 && (b._retainCount || 0) < 2
       ).map(b => ({ ...b, _retainCount: (b._retainCount || 0) + 1 }));
-      const merged = [...data, ...retained].sort((a, b) => {
+      const merged = [...allData2, ...retained].sort((a, b) => {
         if (a.notDeparted !== b.notDeparted) return a.notDeparted ? 1 : -1;
         if (a.etaMinutes === null) return 1;
         if (b.etaMinutes === null) return -1;

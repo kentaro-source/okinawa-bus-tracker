@@ -1,6 +1,7 @@
 // バスナビ沖縄API対象外のバス会社データ（GTFS静的データベース）
 // リアルタイム位置は取得できないため、時刻表ベース＋Google Mapsリンクで案内
 import { TIMETABLE, DIRECTION_META } from './otherBusTimetable';
+import { TOKYO_TRIPS } from './tokyoBusTrips';
 
 // Google Mapsでバス停を検索するURL
 function googleMapsStopUrl(stopName) {
@@ -426,7 +427,10 @@ function geoDistKm(lat1, lng1, lat2, lng2) {
   return Math.sqrt(dlat * dlat + dlng * dlng);
 }
 
-// 東京バスのGTFS-RTリアルタイム車両位置を取得し、出発バス停に向かうバスを検出
+// 東京バスのGTFS-RTリアルタイム情報を取得する。
+// 車両の tripId でGTFS静的データ（tokyoBusTrips.js）の便別停車時分表と結合し、
+// その便の停車順序・定刻・tripUpdatesの予測時刻から正確に判定する。
+// （旧実装は座標の最寄り判定で路線・方向を推測していたため精度不足で停止していた）
 export async function getTokyoBusLive(fromStation, toStation) {
   try {
     const res = await fetch('/api/TokyoBusPositions');
@@ -434,82 +438,118 @@ export async function getTokyoBusLive(fromStation, toStation) {
     const vehicles = await res.json();
     if (!Array.isArray(vehicles) || vehicles.length === 0) return [];
 
+    const nowSec = Date.now() / 1000;
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const dayStartSec = dayStart.getTime() / 1000;
+
     const results = [];
+    const seenVeh = new Set();
 
     for (const v of vehicles) {
-      if (!v.lat || !v.lng) continue;
+      if (!v.tripId || !v.vehicleId || seenVeh.has(v.vehicleId)) continue;
+      // 鮮度のない車両（10分以上前の位置）は使わない
+      if (v.timestamp && nowSec - v.timestamp > 600) continue;
+      const trip = TOKYO_TRIPS[v.tripId];
+      if (!trip) continue;
+      seenVeh.add(v.vehicleId);
 
-      // 各路線の各方向で、車両がどのバス停付近にいるか判定
-      for (const route of TOKYO_BUS_ROUTES) {
-        const directions = [route.stops, [...route.stops].reverse()];
-        for (const stops of directions) {
-          const fromIdx = stops.findIndex(s => stationMatch(fromStation, s));
-          const toIdx = toStation ? stops.findIndex(s => stationMatch(toStation, s)) : -1;
-          if (fromIdx === -1) continue;
-          if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
+      const stops = trip.stops; // [stopId, name, schedMin][]
+      const fromIdx = stops.findIndex(s => stationMatch(fromStation, s[1]));
+      if (fromIdx === -1) continue;
+      const toIdx = toStation ? stops.findIndex(s => stationMatch(toStation, s[1])) : -1;
+      if (toStation && (toIdx === -1 || toIdx <= fromIdx)) continue;
 
-          // 車両の最寄りバス停を探す
-          let nearestIdx = -1;
-          let nearestDist = Infinity;
-          for (let i = 0; i < stops.length; i++) {
-            const info = ALL_OTHER_STOPS.get(stops[i]);
-            if (!info || !info.lat || !info.lng) continue;
-            const dist = geoDistKm(v.lat, v.lng, info.lat, info.lng);
-            if (dist < nearestDist) {
-              nearestDist = dist;
-              nearestIdx = i;
-            }
-          }
+      const schedEpoch = (idx) => dayStartSec + stops[idx][2] * 60;
 
-          // 5km以上離れていたらこの路線ではない
-          if (nearestDist > 5) continue;
-          // 出発バス停より先（通過済み）ならスキップ
-          if (nearestIdx >= fromIdx) continue;
+      // tripUpdatesの予測発車時刻を、この便の停車インデックスで引けるようにする
+      const updByIdx = new Map();
+      for (const u of (v.stopUpdates || [])) {
+        if (!u.depTime) continue;
+        const idx = stops.findIndex(s => s[0] === u.stopId);
+        if (idx >= 0) updByIdx.set(idx, u.depTime);
+      }
 
-          const stopsAway = fromIdx - nearestIdx;
+      // 乗車バス停を発車済みなら対象外（予測発車が1分以上前）
+      if (updByIdx.has(fromIdx) && updByIdx.get(fromIdx) < nowSec - 60) continue;
 
-          // tripUpdatesのstopUpdatesからETAを計算
-          let etaMinutes;
-          if (v.stopUpdates && v.stopUpdates.length > 0) {
-            // 出発バス停に最も近いstopUpdateの出発予定時刻を使う
-            const lastUpdate = v.stopUpdates[v.stopUpdates.length - 1];
-            if (lastUpdate.depTime) {
-              const now = Date.now() / 1000;
-              etaMinutes = Math.round((lastUpdate.depTime - now) / 60);
-            } else {
-              etaMinutes = stopsAway * 3;
-            }
-          } else {
-            // フォールバック: 1停留所あたり約3分で概算
-            etaMinutes = stopsAway * 3;
-          }
-
-          results.push({
-            routeKey: route.id,
-            routeName: route.name,
-            routeShort: route.id,
-            direction: '',
-            busId: `gtfs-rt-${v.vehicleId}`,
-            company: '東京バス',
-            position: { lat: v.lat, lng: v.lng },
-            gpsTime: v.timestamp ? new Date(v.timestamp * 1000) : null,
-            scheduledTime: null,
-            scheduledHour: null,
-            scheduledMinute: null,
-            etaMinutes,
-            delayMinutes: 0,
-            passed: false,
-            notDeparted: false,
-            destination: toStation || stops[stops.length - 1],
-            speed: null,
-            currentStop: stops[nearestIdx],
-            stopsAway,
-            viaStops: [],
-            isTokyoBusLive: true,
-          });
-          break; // 1つの方向でマッチしたら次の路線へ
+      // 車両の現在位置（停車インデックス）: 現在バス停 → 通過済みの予測 → GPS最寄りの順に確定
+      let curIdx = -1;
+      if (v.currentStopId) curIdx = stops.findIndex(s => s[0] === v.currentStopId);
+      if (curIdx < 0) {
+        for (const [idx, t] of updByIdx) {
+          if (t <= nowSec && idx > curIdx) curIdx = idx;
         }
       }
+      if (curIdx < 0 && v.lat && v.lng) {
+        let best = Infinity;
+        stops.forEach((s, i) => {
+          const info = ALL_OTHER_STOPS.get(s[1]);
+          if (info && info.lat && info.lng) {
+            const d = geoDistKm(v.lat, v.lng, info.lat, info.lng);
+            if (d < best) { best = d; curIdx = i; }
+          }
+        });
+        if (best > 1) curIdx = -1; // この便の経路から1km以上離れていたら位置不明として扱う
+      }
+      if (curIdx > fromIdx) continue; // 乗車バス停を通過済み
+
+      const stopsAway = curIdx >= 0 ? fromIdx - curIdx : fromIdx;
+      const notDeparted = curIdx <= 0 && schedEpoch(0) > nowSec;
+
+      // 遅延: 報告のある停留所のうち最も手前のものの予測-定刻差分
+      let delayMinutes = 0;
+      let bestDelayIdx = -1;
+      for (const [idx, t] of updByIdx) {
+        if (idx <= fromIdx && idx > bestDelayIdx) {
+          bestDelayIdx = idx;
+          delayMinutes = Math.round((t - schedEpoch(idx)) / 60);
+        }
+      }
+
+      let etaMinutes;
+      if (updByIdx.has(fromIdx)) {
+        etaMinutes = Math.round((updByIdx.get(fromIdx) - nowSec) / 60);
+        delayMinutes = Math.round((updByIdx.get(fromIdx) - schedEpoch(fromIdx)) / 60);
+      } else {
+        etaMinutes = Math.round((schedEpoch(fromIdx) + delayMinutes * 60 - nowSec) / 60);
+      }
+      if (!notDeparted) etaMinutes = Math.max(etaMinutes, stopsAway); // 下限: 1停留所=最低1分
+      if (etaMinutes < -3) continue;
+
+      // 表示用の路線ラベル: 停車順序が最も一致する路線定義から取る
+      let label = null;
+      let labelScore = -1;
+      for (const def of TOKYO_BUS_ROUTES) {
+        const names = new Set(def.stops);
+        const score = stops.filter(s => names.has(s[1])).length;
+        if (score > labelScore) { labelScore = score; label = def; }
+      }
+
+      const schedMin = stops[fromIdx][2];
+      results.push({
+        routeKey: label ? label.id : trip.r,
+        routeName: label ? label.name : '',
+        routeShort: label ? label.id : trip.r,
+        direction: '',
+        busId: `gtfs-rt-${v.vehicleId}`,
+        company: '東京バス',
+        position: (v.lat && v.lng) ? { lat: v.lat, lng: v.lng } : null,
+        gpsTime: v.timestamp ? new Date(v.timestamp * 1000) : null,
+        scheduledTime: `${Math.floor(schedMin / 60)}:${String(schedMin % 60).padStart(2, '0')}`,
+        scheduledHour: Math.floor(schedMin / 60),
+        scheduledMinute: schedMin % 60,
+        etaMinutes,
+        delayMinutes,
+        passed: false,
+        notDeparted,
+        destination: trip.h ? trip.h.replace(/行き$/, '') : stops[stops.length - 1][1],
+        speed: null,
+        currentStop: stops[Math.max(curIdx, 0)][1],
+        stopsAway,
+        viaStops: [],
+        isTokyoBusLive: true,
+      });
     }
 
     return results;

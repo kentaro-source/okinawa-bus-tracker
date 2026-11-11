@@ -161,6 +161,9 @@ function parseVehiclePositions(data) {
       routeId: trip[5]?.[0] ? textFromBuf(trip[5][0]) : null,
       vehicleId: veh[1]?.[0] ? textFromBuf(veh[1][0]) : null,
       timestamp: vp[5] || null,
+      // field 3 = current_stop_sequence, field 7 = stop_id（次に停車する/停車中のバス停）
+      currentStopSequence: vp[3] ?? null,
+      currentStopId: vp[7]?.[0] ? textFromBuf(vp[7][0]) : null,
     });
   }
   return vehicles;
