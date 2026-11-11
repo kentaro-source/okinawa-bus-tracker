@@ -66,7 +66,7 @@
 - 東京バス・やんばる急行・カリー観光・沖縄エアポートシャトルは確実にカバー
 - Agency ID: 東京バス=574、カリー観光=372、やんばる急行=1082、沖縄エアポートシャトル=367
 - 東京バスGTFS-RT: agencyId `7011501003070` で車両位置取得可能（protobuf→JSONプロキシ実装済み `/api/TokyoBusPositions`）
-- 車両名は「Okibus」（沖縄の東京バスブランド）、route_id 795/796（OTTOP内部ID、TK01-TK06へのマッピング未完）
+- 車両名は「Okibus」（沖縄の東京バスブランド）。route_id は routes.txt 参照（557=TK01, 657=TK03, 796=TK02, 804=TK05, 857=TK06, 895=TK04）。フロント表示は tripId で静的GTFSと結合する方式で 2026-11-11 再開（HANDOVER 既知の問題1）
 - やんばる急行: 公式バスロケあり（yanbaru-bus-navi.com）、OTTOP GTFS-RT対応は未確認
 - カリー観光: リアルタイムなし（時刻表のみ）
 - 沖縄エアポートシャトル: Bus-Vision（公開APIなし）
