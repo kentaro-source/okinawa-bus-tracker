@@ -103,17 +103,26 @@ function App() {
   const intervalRef = useRef(null);
 
   const prevBusesRef = useRef([]);
+  // 前回取得した区間（瞬断防止の保持を区間変更時にリセットする判定用）
+  const prevSegmentRef = useRef(null);
   // 取得の重なり対策: 実行中フラグ（自動更新のスキップ判定）と連番（古い取得結果の破棄）
   const fetchInFlightRef = useRef(false);
   const fetchSeqRef = useRef(0);
   // 第2区間用
   const prevBuses2Ref = useRef([]);
+  const prevSegment2Ref = useRef(null);
   const fetchInFlight2Ref = useRef(false);
   const fetchSeq2Ref = useRef(0);
   const interval2Ref = useRef(null);
   const fetchBuses = useCallback(async (from, to) => {
     const seq = ++fetchSeqRef.current;
     fetchInFlightRef.current = true;
+    // 区間が変わったら瞬断防止の保持を破棄する: 前区間の走行中バスが
+    // 方向チェックなしで混ざるのを防ぐ（同じ区間の自動更新では保持が働く）
+    if (prevSegmentRef.current && (prevSegmentRef.current.from !== from || prevSegmentRef.current.to !== to)) {
+      prevBusesRef.current = [];
+    }
+    prevSegmentRef.current = { from, to };
     try {
       setError(null);
       if (from === to) {
@@ -195,6 +204,11 @@ function App() {
   const fetchBuses2 = useCallback(async (from, to) => {
     const seq = ++fetchSeq2Ref.current;
     fetchInFlight2Ref.current = true;
+    // 第1区間と同様、区間変更時は瞬断防止の保持を破棄する
+    if (prevSegment2Ref.current && (prevSegment2Ref.current.from !== from || prevSegment2Ref.current.to !== to)) {
+      prevBuses2Ref.current = [];
+    }
+    prevSegment2Ref.current = { from, to };
     try {
       setError2(null);
       if (from === to) {

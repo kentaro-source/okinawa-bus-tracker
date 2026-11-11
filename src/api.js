@@ -632,16 +632,28 @@ async function fetchBusesForRoutes(routes, stationName, destinationName, onProgr
       return a.etaMinutes - b.etaMinutes;
     });
 
+  // 一過性の通信失敗で路線ごと結果・方向確認が消えるのを防ぐため、
+  // 系統構成・停留所並びの取得だけ1回リトライする（小さな遅延を挟む）。
+  // BusLocationは鮮度優先のためリトライしない。
+  const retryOnce = async (fn) => {
+    try {
+      return await fn();
+    } catch (e) {
+      await new Promise(r => setTimeout(r, 300));
+      return await fn();
+    }
+  };
+
   const tasks = routes.map((route) => async () => {
     try {
-      const groups = await getCoursesGroup(route.keitouSid);
+      const groups = await retryOnce(() => getCoursesGroup(route.keitouSid));
 
       for (const group of groups) {
         const isUp = group.Name.includes('上り');
         const direction = isUp ? 'up' : 'down';
 
         // First check stations only (lighter call) before fetching bus locations
-        const stations = await getStations(route.keitouSid, group.Sid);
+        const stations = await retryOnce(() => getStations(route.keitouSid, group.Sid));
 
         // Match stations using base name matching (excludes parenthetical direction info)
         const findMatchingStations = (name) => stations.filter(s => matchStation(name, s.Name));
@@ -699,11 +711,26 @@ async function fetchBusesForRoutes(routes, stationName, destinationName, onProgr
 // StationCodeキャッシュ（セッション中有効）
 const stationCodeCache = new Map();
 
-// StationCorrectionに未登録のバス停のStationCodeを手動定義
+// StationCodeの固定定義
+// - 那覇空港: StationCorrectionに未登録のため手動定義
+// - 主要バス停: バスナビ側の改称・StationCorrection障害でも接近情報/時刻表が
+//   落ちないよう、実在確認済みのコードを固定する（2026-11-10に全件照会して検証）
 const KNOWN_STATION_CODES = {
   '那覇空港': '1602',
   '国内線旅客ターミナル前': '1602', // 旧称
   '旅客ターミナル前': '1602', // 旧称（旧内部名）
+  '那覇バスターミナル': '0501',
+  '県庁北口': '0502',
+  '県庁前': '5053',
+  '牧志': '0504',
+  '泊高橋': '0508',
+  '普天間': '1160',
+  'イオンモール沖縄ライカム': '0702',
+  '具志川バスターミナル': '1274',
+  'コンベンションセンター前': '1561',
+  '名護バスターミナル': '1132',
+  '沖縄北ＩＣ': '1597',
+  '屋富祖': '1004',
 };
 
 // バス停名からStationCodeを取得
@@ -1057,10 +1084,11 @@ function mergeBusResults(realtimeBuses, confirmedRouteEnds, approach, fromStatio
     return !rtMins.some(m => Math.abs(m - approachMin) <= 3);
   });
 
-  // 時刻表エントリが多すぎないよう、フィルタ後に最大5本に制限
+  // 時刻表エントリが多すぎないよう、フィルタ後に最大10本に制限
+  // （リアルタイムが薄い時間帯・路線では時刻表が主情報源になるため厚めに残す）
   const timetableOnly = uniqueApproach.filter(b => b.isTimetable);
   const approachOnly = uniqueApproach.filter(b => !b.isTimetable);
-  const limitedTimetable = timetableOnly.slice(0, 5);
+  const limitedTimetable = timetableOnly.slice(0, 10);
   const merged = [...realtime, ...approachOnly, ...limitedTimetable];
 
   return merged
