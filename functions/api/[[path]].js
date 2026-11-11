@@ -66,8 +66,8 @@ function parseTimetableHtml(html) {
     const destination = destMatch ? destMatch[1].trim() : '';
     const company = destMatch ? routeInfo.slice(destMatch.index + destMatch[0].length).trim() : '';
 
-    // 平日/土曜/日祝ブロックのパース
-    const schedules = { weekday: [], saturday: [], holiday: [] };
+    // 平日/土曜/日祝ブロックのパース（日祝は日曜・祝日を分けて保持する）
+    const schedules = { weekday: [], saturday: [], sunday: [], holiday: [] };
     let currentType = null;
 
     for (let i = 2; i < rows.length; i++) {
@@ -90,9 +90,19 @@ function parseTimetableHtml(html) {
       if (isNaN(hour)) continue;
 
       if (minuteCell) {
-        const minutes = minuteCell.split(/\s+/).map(m => m.replace(/[^\d]/g, '')).filter(m => m);
-        for (const min of minutes) {
-          schedules[currentType].push({ hour: hour % 24, minute: parseInt(min) });
+        const tokens = minuteCell.split(/\s+/).filter(m => m);
+        for (const token of tokens) {
+          const digits = token.replace(/[^\d]/g, '');
+          if (!digits) continue;
+          const entry = { hour: hour % 24, minute: parseInt(digits) };
+          if (currentType === 'holiday') {
+            // 日祝ブロック内は「日」=日曜のみ・「祝」=祝日のみ・無印=両日の便が混在する
+            if (token.startsWith('日')) schedules.sunday.push(entry);
+            else if (token.startsWith('祝')) schedules.holiday.push(entry);
+            else { schedules.sunday.push(entry); schedules.holiday.push(entry); }
+          } else {
+            schedules[currentType].push(entry);
+          }
         }
       }
     }
@@ -199,15 +209,74 @@ function parseTripUpdates(data) {
   return trips;
 }
 
-// 現在の曜日種別を判定
+// 日本の祝日（国民の祝日＋振替休日＋国民の休日）を年単位で算出する
+const holidayCacheByYear = new Map();
+function japaneseHolidays(year) {
+  if (holidayCacheByYear.has(year)) return holidayCacheByYear.get(year);
+  const set = new Set();
+  const key = (m, d) => `${m}-${d}`;
+  const add = (m, d) => set.add(key(m, d));
+  const nthMonday = (m, n) => {
+    const firstDow = new Date(Date.UTC(year, m - 1, 1)).getUTCDay();
+    add(m, 1 + ((8 - firstDow) % 7) + (n - 1) * 7);
+  };
+  add(1, 1);            // 元日
+  nthMonday(1, 2);      // 成人の日
+  add(2, 11);           // 建国記念の日
+  add(2, 23);           // 天皇誕生日
+  add(3, Math.floor(20.8431 + 0.242194 * (year - 1980)) - Math.floor((year - 1980) / 4)); // 春分の日
+  add(4, 29);           // 昭和の日
+  add(5, 3);            // 憲法記念日
+  add(5, 4);            // みどりの日
+  add(5, 5);            // こどもの日
+  nthMonday(7, 3);      // 海の日
+  add(8, 11);           // 山の日
+  nthMonday(9, 3);      // 敬老の日
+  add(9, Math.floor(23.2488 + 0.242194 * (year - 1980)) - Math.floor((year - 1980) / 4)); // 秋分の日
+  nthMonday(10, 2);     // スポーツの日
+  add(11, 3);           // 文化の日
+  add(11, 23);          // 勤労感謝の日
+
+  const isHoliday = (date) => set.has(key(date.getUTCMonth() + 1, date.getUTCDate()));
+  // 振替休日: 祝日が日曜に当たる場合、その後で祝日でない最も近い日を休日とする
+  for (let m = 1; m <= 12; m++) {
+    for (let d = 1; d <= 31; d++) {
+      const date = new Date(Date.UTC(year, m - 1, d));
+      if (date.getUTCMonth() !== m - 1) continue;
+      if (isHoliday(date) && date.getUTCDay() === 0) {
+        const sub = new Date(date.getTime() + 86400000);
+        while (isHoliday(sub)) sub.setTime(sub.getTime() + 86400000);
+        if (sub.getUTCFullYear() === year) add(sub.getUTCMonth() + 1, sub.getUTCDate());
+      }
+    }
+  }
+  // 国民の休日: 祝日に挟まれた平日（月〜金）を休日とする
+  for (let m = 1; m <= 12; m++) {
+    for (let d = 1; d <= 31; d++) {
+      const date = new Date(Date.UTC(year, m - 1, d));
+      if (date.getUTCMonth() !== m - 1 || isHoliday(date)) continue;
+      const dow = date.getUTCDay();
+      if (dow === 0 || dow === 6) continue;
+      const prev = new Date(date.getTime() - 86400000);
+      const next = new Date(date.getTime() + 86400000);
+      const prevIs = prev.getUTCFullYear() === year ? isHoliday(prev) : japaneseHolidays(year - 1).has(key(prev.getUTCMonth() + 1, prev.getUTCDate()));
+      const nextIs = next.getUTCFullYear() === year ? isHoliday(next) : japaneseHolidays(year + 1).has(key(next.getUTCMonth() + 1, next.getUTCDate()));
+      if (prevIs && nextIs) add(m, d);
+    }
+  }
+  holidayCacheByYear.set(year, set);
+  return set;
+}
+
+// 現在の曜日種別を判定（祝日は曜日より優先。バスは祝日ダイヤで運行されるため）
 function getDayType() {
-  // JST (UTC+9) で曜日判定
-  const now = new Date();
-  const jstDay = new Date(now.getTime() + 9 * 60 * 60 * 1000).getUTCDay();
-  if (jstDay === 0) return 'holiday'; // 日曜
-  if (jstDay === 6) return 'saturday';
+  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const holidays = japaneseHolidays(jst.getUTCFullYear());
+  if (holidays.has(`${jst.getUTCMonth() + 1}-${jst.getUTCDate()}`)) return 'holiday';
+  const day = jst.getUTCDay();
+  if (day === 0) return 'sunday';
+  if (day === 6) return 'saturday';
   return 'weekday';
-  // TODO: 祝日判定
 }
 
 // LINE Bot: 署名検証
@@ -469,7 +538,7 @@ const allRoutes = parseTimetableHtml(parsed);
     const upcoming = [];
 
     for (const route of allRoutes) {
-      const times = route.schedules[dayType] || [];
+      const times = route.schedules[dayType] || route.schedules.holiday || [];
       for (const t of times) {
         const totalMin = t.hour * 60 + t.minute;
         if (totalMin >= currentMinutes - 5) { // 5分前まで表示
