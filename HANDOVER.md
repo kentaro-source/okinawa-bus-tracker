@@ -34,7 +34,7 @@
 ### ホスティング・デプロイ
 - Cloudflare Pages（プロジェクト名 `okinawa-bus`、URL: okinawa-bus.pages.dev）
 - ビルド: `npm run build` → `dist/` 生成
-- デプロイ（2026-11-11からAPIトークン方式。ダッシュボード直接アップロードとzip方式は廃止）: Cloudflare管理画面へのログインはユーザー専用。Muse はデプロイ専用APIトークン（Account / Cloudflare Pages / Edit、アカウントID `e29fe68ed87e8288aada63c066aadb70`）を custom.cloudflare コネクタ経由で使う。手順: dist の内容＋ルートに `_worker.js`（`functions/api/[[path]].js` の変換版、現行 `_worker_v6.js`）を置いたフォルダを用意し、`~/workspace/custom-connectors/custom.cloudflare/bin/cf_deploy.sh <フォルダ>` を実行する（サロゲートを CLOUDFLARE_API_TOKEN に入れて wrangler@4 で公開するラッパー）。デプロイ後は必ず本番URLが200を返すことまで確認する
+- デプロイ（2026-11-11からAPIトークン方式。ダッシュボード直接アップロードとzip方式は廃止）: Cloudflare管理画面へのログインはユーザー専用。Muse はデプロイ専用APIトークン（Account / Cloudflare Pages / Edit、アカウントID `e29fe68ed87e8288aada63c066aadb70`）を custom.cloudflare コネクタ経由で使う。手順: dist の内容＋ルートに `_worker.js`（`functions/api/[[path]].js` の変換版、現行 `_worker_v7.js`。変換は onRequest→handleApiRequest への改名＋末尾にASSETS委譲の default export を付けるだけ。functions を編集したら必ず再変換すること）を置いたフォルダを用意し、`~/workspace/custom-connectors/custom.cloudflare/bin/cf_deploy.sh <フォルダ>` を実行する（サロゲートを CLOUDFLARE_API_TOKEN に入れて wrangler@4 で公開するラッパー）。デプロイ後は必ず本番URLが200を返すことまで確認する
 - 注意: Direct Upload APIを手書きで叩いてデプロイしてはいけない。`_worker.js` は資産 manifest に含めず、フォームの `_worker.bundle` フィールドとして送る必要がある（wranglerだけが正しく組み立てる）。2026-11-11の移行時に手書きデプロイ（f3e4c349）がこの欠落で全ページ500となり、wrangler公開（ba7124ab）で復旧した
 - 素のwranglerコマンド（トークンを環境変数で渡せる環境向け）: `npx wrangler pages deploy dist --project-name=okinawa-bus --branch=main --commit-dirty=true`
 - 開発サーバ: `npm run dev`（ポート5173。vite.config.jsのproxy設定でAPI呼び出しを busnavi-okinawa.com に転送するため、Cloudflare Functionsなしでローカル動作する）
