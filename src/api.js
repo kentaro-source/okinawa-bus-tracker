@@ -637,8 +637,8 @@ async function fetchBusesForRoutes(routes, stationName, destinationName, onProgr
   // isTimetableバスのdestinationがこの終点名にマッチすれば正しい方向と判定
   const confirmedRouteEnds = new Map();
   // 出発バス停に一致した停留所のSid（のりば単位）。
-  // 那覇バスターミナルのようにApproach由来のSidが到着のりばを指すバス停では、
-  // Timetable APIが到着便しか返さないため、出発のりばのSidで時刻表を引き直すのに使う
+  // Approach由来のSidは1方向分しか時刻表を返さないため、
+  // 全のりばのSidで時刻表を引き直して補完するのに使う
   const fromStationSids = new Set();
 
   // 途中経過にも最終結果にも使う共通の絞り込み＋並び替え
@@ -977,14 +977,19 @@ async function getTimetableBuses(stationSid, busStopCode, destinationName) {
   }
 }
 
-// 出発のりばのSidから時刻表を取得する（Approach由来Sidが到着のりばを指すバス停向け）
+// 出発停の全のりばのSidから時刻表を取得する（Approach由来Sidの不足分を補う）
 // 例: 那覇バスターミナルはApproachのSidでは到着便しか返らないが、
-// 各路線のGetStationsで得た「のりば」のSidでは出発便が返る（2026-11-11実証）
+// 各路線のGetStationsで得た「のりば」のSidでは出発便が返る（2026-11-11実証）。
+// 通常のバス停でもApproachのSidは1方向ののりばしか指さないため、
+// 反対方向の発車はこの経路でしか取得できない（2026-11-16点検）
 async function getDepartureTimetableBuses(stationName, stationSids) {
   const stationCode = await getStationCode(stationName);
   if (!stationCode || !stationSids || stationSids.size === 0) return [];
   const busStopCode = stationCode + '0000';
-  const sids = Array.from(stationSids).slice(0, 6);
+  // 那覇バスターミナルはSidが22個あり、上限6では空港方面ののりば分が
+  // 取得できなかった実測があるため、全Sidを覆える24を上限とする
+  // （Timetable応答は5分キャッシュされるため負荷は限定的）
+  const sids = Array.from(stationSids).slice(0, 24);
   const lists = await Promise.all(
     sids.map(sid => getTimetableBuses(sid, busStopCode, null).catch(() => []))
   );
@@ -1072,15 +1077,14 @@ export async function getBusesBetween(fromStation, toStation, onPartial) {
   });
   await approachPromise;
 
-  // Approach由来の時刻表に「出発便」が1本も無い場合（那覇バスターミナル等、
-  // ApproachのSidが到着のりばを指すバス停）、走査で集めた出発のりばのSidで
-  // 時刻表を引き直して補う。到着便しか無い時刻表は方向フィルタで全て落ち、
-  // リアルタイムが薄い時間帯に区間全体が空表示になっていた（2026-11-11実地報告）
+  // ApproachのSidはバス停ごとに1つだけで、複数のりばのうち1方向分しか
+  // 時刻表を返さない。那覇バスターミナルでは到着のりばを指すため出発便が
+  // 0件になり（2026-11-11実地報告）、通常のバス停でも反対方向のりばの
+  // 発車が丸ごと欠ける（2026-11-16に主要66駅を点検し、50駅で実発車の
+  // 欠落を確認）。このため、走査で集めた出発停の全Sidで時刻表を引き直し、
+  // 重複を除いて常時マージする
   let finalApproach = approachData || [];
-  const usableTimetable = finalApproach.filter(
-    b => b.isTimetable && !matchStation(fromStation, b.destination || '')
-  );
-  if (usableTimetable.length === 0 && realtimeResult.fromStationSids?.size > 0) {
+  if (realtimeResult.fromStationSids?.size > 0) {
     try {
       const extra = await getDepartureTimetableBuses(fromStation, realtimeResult.fromStationSids);
       if (extra.length > 0) {
